@@ -1,0 +1,38 @@
+# Core scientific computing
+numpy
+scipy
+pandas
+
+# Audio signal processing
+librosa
+soundfile
+audioread
+
+# Machine learning
+scikit-learn
+
+# Deep learning
+tensorflow
+keras
+
+# Visualization
+matplotlib
+seaborn
+
+# Data analysis and debugging
+tqdm
+
+# Interactive Python environment
+ipython
+jupyter
+notebook
+
+# Configuration and utilities
+pyyaml
+typing
+
+# GUI (simple interface)
+PyQt6
+
+# Optional but useful for experiments tracking
+tensorboard

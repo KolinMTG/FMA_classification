@@ -1,0 +1,57 @@
+Header structure of data/metadata/tracks.csv:
+
+Columns indexed hierarchically:
+
+000: Unnamed: 0_level_0 > Unnamed: 0_level_1 > track_id
+001: album > comments > Unnamed: 1_level_2
+002: album > date_created > Unnamed: 2_level_2
+003: album > date_released > Unnamed: 3_level_2
+004: album > engineer > Unnamed: 4_level_2
+005: album > favorites > Unnamed: 5_level_2
+006: album > id > Unnamed: 6_level_2
+007: album > information > Unnamed: 7_level_2
+008: album > listens > Unnamed: 8_level_2
+009: album > producer > Unnamed: 9_level_2
+010: album > tags > Unnamed: 10_level_2
+011: album > title > Unnamed: 11_level_2
+012: album > tracks > Unnamed: 12_level_2
+013: album > type > Unnamed: 13_level_2
+014: artist > active_year_begin > Unnamed: 14_level_2
+015: artist > active_year_end > Unnamed: 15_level_2
+016: artist > associated_labels > Unnamed: 16_level_2
+017: artist > bio > Unnamed: 17_level_2
+018: artist > comments > Unnamed: 18_level_2
+019: artist > date_created > Unnamed: 19_level_2
+020: artist > favorites > Unnamed: 20_level_2
+021: artist > id > Unnamed: 21_level_2
+022: artist > latitude > Unnamed: 22_level_2
+023: artist > location > Unnamed: 23_level_2
+024: artist > longitude > Unnamed: 24_level_2
+025: artist > members > Unnamed: 25_level_2
+026: artist > name > Unnamed: 26_level_2
+027: artist > related_projects > Unnamed: 27_level_2
+028: artist > tags > Unnamed: 28_level_2
+029: artist > website > Unnamed: 29_level_2
+030: artist > wikipedia_page > Unnamed: 30_level_2
+031: set > split > Unnamed: 31_level_2
+032: set > subset > Unnamed: 32_level_2
+033: track > bit_rate > Unnamed: 33_level_2
+034: track > comments > Unnamed: 34_level_2
+035: track > composer > Unnamed: 35_level_2
+036: track > date_created > Unnamed: 36_level_2
+037: track > date_recorded > Unnamed: 37_level_2
+038: track > duration > Unnamed: 38_level_2
+039: track > favorites > Unnamed: 39_level_2
+040: track > genre_top > Unnamed: 40_level_2
+041: track > genres > Unnamed: 41_level_2
+042: track > genres_all > Unnamed: 42_level_2
+043: track > information > Unnamed: 43_level_2
+044: track > interest > Unnamed: 44_level_2
+045: track > language_code > Unnamed: 45_level_2
+046: track > license > Unnamed: 46_level_2
+047: track > listens > Unnamed: 47_level_2
+048: track > lyricist > Unnamed: 48_level_2
+049: track > number > Unnamed: 49_level_2
+050: track > publisher > Unnamed: 50_level_2
+051: track > tags > Unnamed: 51_level_2
+052: track > title > Unnamed: 52_level_2

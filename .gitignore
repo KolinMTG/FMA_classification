@@ -1,0 +1,12 @@
+# Environment variables
+.env
+
+# Data and logs
+data/
+.logs/
+
+# Trash or temporary files
+.trash/
+
+# Editor-specific settings
+.vscode/
