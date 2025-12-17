@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from src.logger import get_logger
 import tensorflow as tf
-from src.cste import Split
+from src.cste import  SplitLabels, SplitRatios
 
 log = get_logger("data_split.log")
 
@@ -30,7 +30,10 @@ def get_label_from_tfrecord(tfrecord_path: str) -> int:
         return None
 
 
-def split_indices(num_samples: int, train_ratio: float = 0.7, val_ratio: float = 0.15, seed: int = 42):
+def split_indices(num_samples: int, 
+                  train_ratio: float = SplitRatios.TRAIN, 
+                  val_ratio: float = SplitRatios.VAL, 
+                  seed: int = 42):
     """
     Generate train/val/test indices.
     """
@@ -48,11 +51,10 @@ def split_indices(num_samples: int, train_ratio: float = 0.7, val_ratio: float =
     return train_idx, val_idx, test_idx
 
 
-def data_split_pipeline(tfrecord_folder: str,
+def data_split_pipeline_02(tfrecord_folder: str,
                         output_csv_path: str,
-                        train_ratio: float = 0.7,
-                        val_ratio: float = 0.15,
-                        test_ratio: float = 0.15,
+                        train_ratio: float = SplitRatios.TRAIN,
+                        val_ratio: float = SplitRatios.VAL,
                         seed: int = 42) -> bool:
     """
     Complete pipeline to split TFRecord dataset into train/val/test CSV.
@@ -116,9 +118,9 @@ def data_split_pipeline(tfrecord_folder: str,
                                                      seed=seed)
 
         split_values = np.zeros(len(tfrecord_paths), dtype=int)
-        split_values[val_idx] = Split.VAL
-        split_values[test_idx] = Split.TEST
-        split_values[train_idx] = Split.TRAIN
+        split_values[val_idx] = SplitLabels.VAL
+        split_values[test_idx] = SplitLabels.TEST
+        split_values[train_idx] = SplitLabels.TRAIN
 
         # Build dataframe
         df_split = pd.DataFrame({
@@ -144,10 +146,6 @@ if __name__ == "__main__":
     success = data_split_pipeline(
         tfrecord_folder="data/tfrecords",
         output_csv_path="data/metadata/dataset_split.csv",
-        train_ratio=0.8,
-        val_ratio=0.1,
-        test_ratio=0.1,
-        seed=42
     )
     if success:
         log.info("Data split pipeline completed successfully.")

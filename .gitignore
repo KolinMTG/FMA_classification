@@ -5,6 +5,10 @@
 data/
 .logs/
 
+# Model checkpoints
+checkpoints/
+# Saved models
+models/
 # Trash or temporary files
 .trash/
 

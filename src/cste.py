@@ -16,7 +16,7 @@ class KaggleDatasetRef:
     METADATA_FOLDER = r"fma_metadata/"
 
 # DATA directory path
-FMA_SMALL_PATH = r"data/FMA_small/"
+FMA_SMALL_PATH = r"data/FMA_medium/fma_medium/"
 
 # TRASH directory path
 TRASH_DIR : str = r".trash/"
@@ -44,10 +44,11 @@ PATH_LABEL_CSV_PATH = r"data/metadata/path_labels.csv"
 
 # About TFRecord output
 TFRECORD_OUTPUT_DIR = r"data/tfrecords/"
+TFRECORD_DIR = r"data/tfrecords"
+DATA_SPLIT_CSV_PATH = r"data/metadata/dataset_split.csv"
 
 #CLASS_NUMBER
 NB_CLASSES : int = 6
-
 
 #About audio processing
 DEFAULT_SAMPLE_RATE : int = 22050
@@ -59,32 +60,59 @@ DEFAULT_HOP_LENGTH : int = 512
 DEFAULT_N_MELS : int = 128
 
 
-
-# Dataset
-TFRECORD_DIR = r"data/tfrecords"
-
 # Audio / Spectrogram
 N_MELS = 128
 NUM_CHANNELS = 1
 
-# Training
-NUM_CLASSES = 6
-BATCH_SIZE = 32
-EPOCHS = 30
-LEARNING_RATE = 1e-3
 
-# Split
-TRAIN_RATIO = 0.8
-VAL_RATIO = 0.1
-TEST_RATIO = 0.1
+NUM_CLASSES = 6
+# Training
+class TrainingConstants:
+
+    BATCH_SIZE = 32
+    EPOCHS = 30
+    LEARNING_RATE = 1e-3
+
 
 # Paths
 CHECKPOINT_DIR = "checkpoints"
 
+# Data split ratios
+class SplitRatios:
+    TRAIN = 0.70
+    VAL = 0.15
+    TEST = 0.15
 
-
-# Enum pour splits plus reproductibles 
-class Split:
+# Labels for one-hot encoding
+class SplitLabels:
     TRAIN = 0
     VAL = 1
     TEST = 2
+
+# Model defaults parameters
+class ModelDefaults:
+    NAME = "cnn_spectrogram"
+    INPUT_SHAPE = (128, 173, 1)   # height, width, channels (ex: 4s audio spectrogram)
+    OUTPUT_UNITS = 6              # nombre de classes
+    CONV_LAYERS = [               # tuples (filters, kernel_size)
+        (32, (3,3)),
+        (64, (3,3)),
+        (128, (3,3))
+    ]
+    CONV_ACTIVATIONS = ["relu", "relu", "relu"]
+    POOL_SIZE = (2,2)
+    DROPOUT_RATES = [0.3, 0.3, 0.4]  # après chaque block conv+pool
+    DENSE_LAYERS = [128]          # fully connected après flatten
+    DENSE_ACTIVATIONS = ["relu"]
+    OPTIMIZER = "adam"
+    LEARNING_RATE = 1e-3
+    LOSS = "sparse_categorical_crossentropy"
+    METRICS = ["accuracy"]
+
+
+
+# Model CSV paths (3 different CSVs for different purposes)
+class ModelsCSV:
+    REGISTRY: str = "models/models_registry.csv"
+    TRAINING: str = "models/model_training.csv"
+    PERFORMANCE: str = "models/model_performance.csv"

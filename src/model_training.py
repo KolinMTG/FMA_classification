@@ -2,19 +2,18 @@ import os
 from pathlib import Path
 import tensorflow as tf
 from typing import List, Tuple
-
+from datetime import datetime
+import pandas as pd
 from src.cste import *
-from src.models.model import build_cnn_model
 from src.logger import get_logger
 
 log = get_logger("model_training")
-AUTOTUNE = tf.data.AUTOTUNE
 
 # --------------------------------------------------
 # TFRecord parsing
 # --------------------------------------------------
 
-def parse_tfrecord(example_proto):
+def parse_tfrecord(example_proto: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """
     Parse a TFRecord example into (spectrogram, label).
     """
@@ -42,101 +41,194 @@ def parse_tfrecord(example_proto):
 # Dataset builder
 # --------------------------------------------------
 
-def load_tfrecord_files(tfrecord_dir: str = TFRECORD_DIR) -> List[str]:
-    """
-    Load all TFRecord files from directory.
-    """
-    files = sorted(str(f) for f in Path(tfrecord_dir).glob("*.tfrecord"))
-    if not files:
-        raise RuntimeError("No TFRecord files found")
-    return files
 
-def split_files(files: List[str]) -> Tuple[List[str], List[str], List[str]]:
-    """
-    Split TFRecord files into train / validation / test.
-    """
-    total = len(files)
-    train_end = int(total * TRAIN_RATIO)
-    val_end = train_end + int(total * VAL_RATIO)
+def build_dataset_from_csv(
+    tfrecord_dir: str = TFRECORD_OUTPUT_DIR,
+    csv_path: str = DATA_SPLIT_CSV_PATH,
+    split_value: int = SplitLabels.TRAIN,
+    batch_size: int = TrainingConstants.BATCH_SIZE,
+    shuffle: bool = False,
+):
+    """Construct a tf.data.Dataset from TFRecord files listed in a CSV file, only including those with a specific split value. 0 = Train, 1 = Val, 2 = Test."""
+    df = pd.read_csv(csv_path)
 
-    return (
-        files[:train_end],
-        files[train_end:val_end],
-        files[val_end:]
-    )
+    # Filter by split
+    df = df[df["split"] == split_value]
 
-def build_dataset(files: List[str], training: bool) -> tf.data.Dataset:
-    """
-    Build tf.data.Dataset from TFRecord files.
-    """
-    dataset = tf.data.TFRecordDataset(files)
-    dataset = dataset.map(parse_tfrecord, num_parallel_calls=AUTOTUNE)
+    # Build full paths
+    tfrecord_paths = [
+        str(Path(tfrecord_dir) / Path(p).name) for p in df["path"]
+    ]
 
-    if training:
-        dataset = dataset.shuffle(1000)
+    dataset = tf.data.TFRecordDataset(tfrecord_paths)
+    dataset = dataset.map(parse_tfrecord, num_parallel_calls=tf.data.AUTOTUNE)
 
-    dataset = dataset.batch(BATCH_SIZE)
-    dataset = dataset.prefetch(AUTOTUNE)
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size=len(tfrecord_paths))
+
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
     return dataset
 
-# --------------------------------------------------
-# Training pipeline
-# --------------------------------------------------
 
-def train_pipeline():
+def train_model(
+    model: tf.keras.Model,
+    tfrecord_dir: str,
+    csv_path: str,
+    batch_size: int = TrainingConstants.BATCH_SIZE,
+    epochs: int = TrainingConstants.EPOCHS,
+    learning_rate: float = TrainingConstants.LEARNING_RATE,
+    early_stopping_patience: int = 5,
+    save: bool = False,
+    model_save_dir: str | None = ModelsCSV.TRAINING,
+    model_registry_csv: str | None = ModelsCSV.REGISTRY,
+    notes: str = "",
+):
     """
-    Full training pipeline.
+    Train a TensorFlow model using TFRecords and optionally save it.
+
+    Parameters
+    ----------
+    save : bool
+        If True, the trained model is saved and logged to CSV.
     """
-    log.info("Loading TFRecord files")
-    files = load_tfrecord_files(TFRECORD_DIR)
 
-    train_files, val_files, test_files = split_files(files)
+    train_ds = build_dataset_from_csv(
+        tfrecord_dir,
+        csv_path,
+        split_value=0,
+        batch_size=batch_size,
+        shuffle=True,
+    )
 
-    log.info(f"Train files: {len(train_files)}")
-    log.info(f"Validation files: {len(val_files)}")
-    log.info(f"Test files: {len(test_files)}")
+    val_ds = build_dataset_from_csv(
+        tfrecord_dir,
+        csv_path,
+        split_value=1,
+        batch_size=batch_size,
+        shuffle=False,
+    )
 
-    train_ds = build_dataset(train_files, training=True)
-    val_ds = build_dataset(val_files, training=False)
-    test_ds = build_dataset(test_files, training=False)
-
-    # Infer input shape dynamically
-    for x, _ in train_ds.take(1):
-        input_shape = x.shape[1:]
-
-    log.info(f"Model input shape: {input_shape}")
-
-    model = build_cnn_model(input_shape)
-
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    # if not model._is_compiled:
+    #     model.compile(
+    #         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+    #         loss="sparse_categorical_crossentropy",
+    #         metrics=["accuracy"],
+    #     )
 
     callbacks = [
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=os.path.join(CHECKPOINT_DIR, "best_model.keras"),
-            monitor="val_accuracy",
-            save_best_only=True,
-            verbose=1
-        ),
         tf.keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            patience=5,
-            restore_best_weights=True
+            patience=early_stopping_patience,
+            restore_best_weights=True,
         )
     ]
 
-    log.info("Starting training")
-    model.fit(
+    history = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=EPOCHS,
-        callbacks=callbacks
+        epochs=epochs,
+        callbacks=callbacks,
     )
 
-    log.info("Evaluating on test set")
-    loss, acc = model.evaluate(test_ds)
-    log.info(f"Test accuracy: {acc:.4f}")
-    log.info(f"Test loss: {loss:.4f}")
+    # Optional save
+    if save:
+        if not all([model_save_dir, model.name, model_registry_csv]):
+            raise ValueError(
+                "model_save_dir, model_name and model_registry_csv must be provided when save=True"
+            )
 
-if __name__ == "__main__":
-    train()
+        best_val_loss = min(history.history["val_loss"])
+        best_val_accuracy = max(history.history.get("val_accuracy", []))
+        epochs_trained = len(history.history["loss"])
+
+        save_model_and_log(
+            model=model,
+            model_save_dir=model_save_dir,
+            model_name=model.name,
+            csv_log_path=model_registry_csv,
+            dataset_csv_path=csv_path,
+            epochs_trained=epochs_trained,
+            batch_size=batch_size,
+            val_loss=best_val_loss,
+            val_accuracy=best_val_accuracy,
+            notes=notes,
+        )
+
+    return model
+
+
+
+
+def save_model_and_log(
+    model: tf.keras.Model,
+    model_save_dir: str,
+    model_name: str,
+    csv_log_path: str,
+    dataset_csv_path: str,
+    epochs_trained: int = TrainingConstants.EPOCHS,
+    batch_size: int = TrainingConstants.BATCH_SIZE,
+    val_loss: float | None = None,
+    val_accuracy: float | None = None,
+    notes: str = "",
+):
+    """
+    Save a trained TensorFlow model and log metadata into a CSV file.
+
+    Parameters
+    ----------
+    model : tf.keras.Model
+        Trained TensorFlow model.
+    model_save_dir : str
+        Directory where the model will be saved.
+    model_name : str
+        Human-readable model name.
+    csv_log_path : str
+        Path to the CSV file storing model metadata.
+    dataset_csv_path : str
+        Path to the dataset split CSV used for training.
+    epochs_trained : int
+        Number of epochs actually trained.
+    batch_size : int
+        Training batch size.
+    val_loss : float, optional
+        Validation loss of the best model.
+    val_accuracy : float, optional
+        Validation accuracy of the best model.
+    notes : str
+        Free text notes.
+    """
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    model_save_dir = Path(model_save_dir)
+    model_save_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = model_save_dir / f"{model_name}_{timestamp}"
+    model.save(model_path)
+
+    log_entry = {
+        "timestamp": timestamp,
+        "model_name": model_name,
+        "model_path": str(model_path),
+        "dataset_csv_path": dataset_csv_path,
+        "epochs_trained": epochs_trained,
+        "batch_size": batch_size,
+        "val_loss": val_loss,
+        "val_accuracy": val_accuracy,
+        "framework": "tensorflow",
+        "notes": notes,
+    }
+
+    csv_log_path = Path(csv_log_path)
+    csv_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if csv_log_path.exists():
+        df = pd.read_csv(csv_log_path)
+        df = pd.concat([df, pd.DataFrame([log_entry])], ignore_index=True)
+    else:
+        df = pd.DataFrame([log_entry])
+
+    df.to_csv(csv_log_path, index=False)
+

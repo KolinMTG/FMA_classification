@@ -1,149 +1,137 @@
-import copy
-import uuid
-import random
-from typing import List, Dict
-
 import tensorflow as tf
+from pathlib import Path
+import pandas as pd
+from datetime import datetime
 
-from src.models.model import build_cnn_model
-from src.cste import NUM_CLASSES
+from src.cste import *
 from src.logger import get_logger
 
-log = get_logger("model_generator")
+log = get_logger("models")
 
 
-class ModelGenerator:
+def _prepare_dropout_rates(hidden_layers, dropout_rate):
+    """Ensure dropout_rates is a list with correct length."""
+    if isinstance(dropout_rate, float):
+        return [dropout_rate] * len(hidden_layers)
+    return dropout_rate
+
+
+def _check_model_name_unique(model_name, model_csv_path):
+    """Check that the model name is not already in the CSV registry."""
+    csv_path = Path(model_csv_path)
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        if model_name in df["model_name"].values:
+            log.error(f"Model name '{model_name}' already exists in {model_csv_path}.")
+            raise ValueError(f"Model name '{model_name}' already exists in {model_csv_path}.")
+    else:
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_size, dense_layers, dense_activations, dropout_rates):
     """
-    Generate baseline and mutated CNN models for genetic optimization.
+    Construct a CNN for spectrograms and return model + layer description.
     """
+    inputs = tf.keras.Input(shape=input_shape)
+    x = inputs
+    layers_desc = []
 
-    def __init__(
-        self,
-        input_shape: tuple,
-        mutation_rate: float = 0.3,
-        random_seed: int | None = None
-    ):
-        """
-        Args:
-            input_shape: Shape of model input (H, W, C)
-            mutation_rate: Probability of mutating each hyperparameter
-            random_seed: Optional seed for reproducibility
-        """
-        self.input_shape = input_shape
-        self.mutation_rate = mutation_rate
+    # --- Convolutional blocks ---
+    for i, ((filters, kernel_size), activation, dropout) in enumerate(zip(conv_layers, conv_activations, dropout_rates)):
+        x = tf.keras.layers.Conv2D(filters, kernel_size, activation=activation, padding="same")(x)
+        layers_desc.append(f"conv-{filters}x{kernel_size}-{activation}")
+        x = tf.keras.layers.MaxPooling2D(pool_size)(x)
+        layers_desc.append(f"maxpool-{pool_size}")
+        if dropout > 0:
+            x = tf.keras.layers.Dropout(dropout)(x)
+            layers_desc.append(f"dropout-{dropout}")
 
-        if random_seed is not None:
-            random.seed(random_seed)
+    # --- Flatten + dense layers ---
+    x = tf.keras.layers.Flatten()(x)
+    layers_desc.append("flatten")
+    for neurons, activation in zip(dense_layers, dense_activations):
+        x = tf.keras.layers.Dense(neurons, activation=activation)(x)
+        layers_desc.append(f"dense-{neurons}-{activation}")
 
-    # --------------------------------------------------
-    # Baseline
-    # --------------------------------------------------
+    # --- Output layer ---
+    outputs = tf.keras.layers.Dense(output_units, activation="softmax")(x)
+    layers_desc.append(f"dense-{output_units}-softmax")
 
-    def initialize_baseline(self, baseline_hyperparams: Dict) -> List[Dict]:
-        """
-        Create the baseline model (called once).
-        """
-        model = build_cnn_model(
-            input_shape=self.input_shape,
-            num_classes=NUM_CLASSES,
-            hyperparams=baseline_hyperparams
-        )
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model, layers_desc
 
-        model_desc = {
-            "model_id": self._generate_id(),
-            "generation": 0,
-            "hyperparams": baseline_hyperparams,
-            "model": model,
-            "is_baseline": True
-        }
 
-        log.info("Baseline model initialized")
 
-        return [model_desc]
+def _register_model_csv(model_name, layers_desc, input_shape, output_units, optimizer, learning_rate, model_csv_path):
+    """Save model configuration in a CSV registry."""
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_entry = {
+        "timestamp": timestamp,
+        "model_name": model_name,
+        "layers": ";".join(layers_desc),
+        "input_shape": str(input_shape),
+        "output_units": output_units,
+        "activation_output": "softmax",
+        "optimizer": optimizer,
+        "learning_rate": learning_rate,
+    }
 
-    # --------------------------------------------------
-    # Population generation
-    # --------------------------------------------------
+    csv_path = Path(model_csv_path)
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        df = pd.concat([df, pd.DataFrame([log_entry])], ignore_index=True)
+    else:
+        df = pd.DataFrame([log_entry])
 
-    def generate_models(
-        self,
-        parent_models: List[Dict],
-        n_mutants: int,
-        generation: int
-    ) -> List[Dict]:
-        """
-        Generate mutated models from parent models.
-        """
-        new_population = []
+    df.to_csv(csv_path, index=False)
 
-        for _ in range(n_mutants):
-            parent = random.choice(parent_models)
-            mutated_hparams = self.mutate_hyperparams(parent["hyperparams"])
 
-            model = build_cnn_model(
-                input_shape=self.input_shape,
-                num_classes=NUM_CLASSES,
-                hyperparams=mutated_hparams
-            )
+def build_and_compile_model(
+    model_name: str = ModelDefaults.NAME,
+    input_shape: tuple = ModelDefaults.INPUT_SHAPE,
+    output_units: int = ModelDefaults.OUTPUT_UNITS,
+    conv_layers: list = ModelDefaults.CONV_LAYERS,
+    conv_activations: list = ModelDefaults.CONV_ACTIVATIONS,
+    pool_size: tuple = ModelDefaults.POOL_SIZE,
+    dense_layers: list = ModelDefaults.DENSE_LAYERS,
+    dense_activations: list = ModelDefaults.DENSE_ACTIVATIONS,
+    dropout_rates: list = ModelDefaults.DROPOUT_RATES,
+    optimizer: str = ModelDefaults.OPTIMIZER,
+    learning_rate: float = ModelDefaults.LEARNING_RATE,
+    loss: str = ModelDefaults.LOSS,
+    metrics: list[str] = ModelDefaults.METRICS,
 
-            model_desc = {
-                "model_id": self._generate_id(),
-                "generation": generation,
-                "hyperparams": mutated_hparams,
-                "model": model,
-                "is_baseline": False
-            }
+    save: bool = True,
+    model_csv_path: str = ModelsCSV.REGISTRY,
+) -> tf.keras.Model:
 
-            new_population.append(model_desc)
+    # Step 1: Check name uniqueness
+    _check_model_name_unique(model_name, model_csv_path)
 
-        log.info(f"{len(new_population)} models generated for generation {generation}")
+    # Step 2: Build CNN model
+    model, layers_desc = _build_model(
+        input_shape=input_shape,
+        output_units=output_units,
+        conv_layers=conv_layers,
+        conv_activations=conv_activations,
+        pool_size=pool_size,
+        dense_layers=dense_layers,
+        dense_activations=dense_activations,
+        dropout_rates=dropout_rates
+    )
 
-        return new_population
+    # Step 3: Compile
+    if not hasattr(model, "optimizer"):
+        tf_optimizer = tf.keras.optimizers.get(optimizer)
+        if hasattr(tf_optimizer, "learning_rate"):
+            tf_optimizer.learning_rate = learning_rate
+        model.compile(optimizer=tf_optimizer, loss=loss, metrics=metrics)
 
-    # --------------------------------------------------
-    # Mutation logic
-    # --------------------------------------------------
+    # Step 4: Register CSV
+    if save == True:
+        _register_model_csv(model_name, layers_desc, input_shape, output_units, optimizer, learning_rate, model_csv_path)
 
-    def mutate_hyperparams(self, hyperparams: Dict) -> Dict:
-        """
-        Apply random mutations to hyperparameters.
-        """
-        mutated = copy.deepcopy(hyperparams)
+    log.info(f"Model '{model_name}' built, compiled, and registered successfully.")
 
-        for key, value in hyperparams.items():
-            if random.random() > self.mutation_rate:
-                continue
+    return model
 
-            mutated[key] = self._mutate_value(key, value)
-
-        return mutated
-
-    def _mutate_value(self, key: str, value):
-        """
-        Mutation rules per hyperparameter.
-        """
-        if isinstance(value, int):
-            delta = random.choice([-1, 1])
-            return max(1, value + delta)
-
-        if isinstance(value, float):
-            factor = random.uniform(0.7, 1.3)
-            return round(value * factor, 6)
-
-        if isinstance(value, bool):
-            return not value
-
-        if isinstance(value, list):
-            return random.choice(value)
-
-        return value
-
-    # --------------------------------------------------
-    # Utils
-    # --------------------------------------------------
-
-    def _generate_id(self) -> str:
-        """
-        Generate unique model identifier.
-        """
-        return str(uuid.uuid4())
