@@ -143,7 +143,17 @@ def compute_dataset_statistics(
     labels: List[int],
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     per_bin: bool = True,
-    max_samples: Optional[int] = None
+    max_samples: Optional[int] = None,
+    # ========================================================================
+    # MODIFICATION 1: Ajout des paramètres de spectrogramme configurables
+    # Ces paramètres permettent de contrôler la résolution temps-fréquence
+    # des spectrogrammes log-Mel. Ils DOIVENT être identiques à ceux utilisés
+    # lors du traitement des données (train/val/test) pour garantir la cohérence.
+    # ========================================================================
+    n_fft: int = DEFAULT_N_FFT,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    n_mels: int = DEFAULT_N_MELS,
+    min_db: float = -80.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute mean and standard deviation of log-Mel spectrograms across the dataset.
@@ -159,12 +169,22 @@ def compute_dataset_statistics(
                  If False, compute global statistics (scalars)
         max_samples: Optional limit on number of segments to use for statistics
                      (useful for large datasets to speed up computation)
+        n_fft: FFT window size (affects frequency resolution)
+        hop_length: Number of samples between successive frames (affects time resolution)
+        n_mels: Number of Mel frequency bins (affects frequency granularity)
+        min_db: Minimum decibel value for clipping (affects dynamic range)
     
     Returns:
         mean: Mean values (per-bin or global)
         std: Standard deviation values (per-bin or global)
     """
     log.info(f"Computing dataset statistics from {len(audio_paths)} audio files...")
+    # ========================================================================
+    # MODIFICATION 1bis: Log des paramètres de spectrogramme utilisés
+    # Important pour la traçabilité et la reproductibilité des expériences
+    # ========================================================================
+    log.info(f"Spectrogram parameters: n_fft={n_fft}, hop_length={hop_length}, "
+             f"n_mels={n_mels}, min_db={min_db}")
     
     all_spectrograms = []
     sample_count = 0
@@ -179,7 +199,19 @@ def compute_dataset_statistics(
             segments = split_into_segments(waveform, sample_rate)
             
             for segment in segments:
-                log_mel = compute_log_mel_spectrogram(segment, sample_rate)
+                # ============================================================
+                # MODIFICATION 1ter: Passage des paramètres configurables
+                # à compute_log_mel_spectrogram. Cela garantit que les stats
+                # sont calculées avec les mêmes paramètres que les données.
+                # ============================================================
+                log_mel = compute_log_mel_spectrogram(
+                    segment, 
+                    sample_rate,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    n_mels=n_mels,
+                    min_db=min_db
+                )
                 
                 if log_mel.size == 0:
                     continue
@@ -222,20 +254,45 @@ def compute_dataset_statistics(
     return mean, std
 
 
-def save_normalization_stats(mean: np.ndarray, std: np.ndarray, output_path: str):
+def save_normalization_stats(mean: np.ndarray, std: np.ndarray, output_path: str,
+                             # ============================================
+                             # MODIFICATION 2: Sauvegarde des paramètres
+                             # de spectrogramme avec les stats de normalisation.
+                             # Cela permet de reconstruire exactement les mêmes
+                             # spectrogrammes lors de l'inférence.
+                             # ============================================
+                             n_fft: int = DEFAULT_N_FFT,
+                             hop_length: int = DEFAULT_HOP_LENGTH,
+                             n_mels: int = DEFAULT_N_MELS,
+                             min_db: float = -80.0):
     """
-    Save normalization statistics to a JSON file for later use during inference.
+    Save normalization statistics AND spectrogram parameters to a JSON file.
+    
+    This ensures that during inference, we can reconstruct spectrograms with
+    exactly the same parameters used during training, which is critical for
+    model performance.
     """
     stats = {
         'mean': mean.tolist() if isinstance(mean, np.ndarray) else mean,
         'std': std.tolist() if isinstance(std, np.ndarray) else std,
-        'per_bin': isinstance(mean, np.ndarray) and mean.ndim > 0
+        'per_bin': isinstance(mean, np.ndarray) and mean.ndim > 0,
+        # ====================================================================
+        # MODIFICATION 2bis: Ajout des paramètres de spectrogramme au JSON
+        # Ces paramètres sont essentiels pour garantir la reproductibilité
+        # ====================================================================
+        'n_fft': n_fft,
+        'hop_length': hop_length,
+        'n_mels': n_mels,
+        'min_db': min_db,
+        'sample_rate': DEFAULT_SAMPLE_RATE  # Ajout du sample_rate aussi
     }
     
     with open(output_path, 'w') as f:
         json.dump(stats, f, indent=2)
     
     log.info(f"Normalization statistics saved to {output_path}")
+    log.info(f"Saved spectrogram parameters: n_fft={n_fft}, hop_length={hop_length}, "
+             f"n_mels={n_mels}, min_db={min_db}")
 
 
 # ============================================================================
@@ -312,7 +369,17 @@ def process_audio_to_tfrecord_with_norm(
     mean: np.ndarray,
     std: np.ndarray,
     per_bin: bool = True,
-    sample_rate: int = DEFAULT_SAMPLE_RATE
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    # ========================================================================
+    # MODIFICATION 3: Ajout des paramètres de spectrogramme configurables
+    # Ces paramètres DOIVENT être identiques à ceux utilisés pour calculer
+    # les statistiques de normalisation (mean/std), sinon la normalisation
+    # sera incorrecte et le modèle ne convergera pas correctement.
+    # ========================================================================
+    n_fft: int = DEFAULT_N_FFT,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    n_mels: int = DEFAULT_N_MELS,
+    min_db: float = -80.0,
 ) -> bool:
     """
     Process a single audio file with dataset-level normalization and write to TFRecord.
@@ -325,6 +392,10 @@ def process_audio_to_tfrecord_with_norm(
         std: Dataset standard deviation for normalization
         per_bin: Whether normalization is per-frequency-bin or global
         sample_rate: Audio sample rate
+        n_fft: FFT window size (must match statistics computation)
+        hop_length: Hop length between frames (must match statistics computation)
+        n_mels: Number of Mel bins (must match statistics computation)
+        min_db: Minimum dB for clipping (must match statistics computation)
     
     Returns:
         True if processed successfully, False if skipped
@@ -339,8 +410,21 @@ def process_audio_to_tfrecord_with_norm(
 
         with tf.io.TFRecordWriter(tfrecord_path) as writer:
             for segment in segments:
-                # Compute raw log-Mel spectrogram
-                log_mel = compute_log_mel_spectrogram(segment, sample_rate)
+                # ============================================================
+                # MODIFICATION 3bis: Passage des paramètres configurables
+                # à compute_log_mel_spectrogram. CRITIQUE: ces paramètres
+                # doivent être identiques à ceux utilisés dans
+                # compute_dataset_statistics() sinon les données seront
+                # inconsistantes avec les statistiques de normalisation.
+                # ============================================================
+                log_mel = compute_log_mel_spectrogram(
+                    segment, 
+                    sample_rate,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    n_mels=n_mels,
+                    min_db=min_db
+                )
                 
                 if log_mel.size == 0:
                     log.warning(f"Empty spectrogram for {audio_path}, skipping segment")
@@ -383,7 +467,11 @@ def build_data_pipeline_01(
     val_ratio: float = SplitRatios.VAL,
     per_bin_normalization: bool = True,
     seed: int = RANDOM_SEED,
-    max_stats_samples: Optional[int] = None
+    max_stats_samples: Optional[int] = None,
+    n_fft: int = DEFAULT_N_FFT,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    n_mels: int = DEFAULT_N_MELS,
+    min_db: float = -80.0,
 ) -> None:
     """
     Complete pipeline: split dataset, compute normalization stats, and build TFRecords.
@@ -409,6 +497,10 @@ def build_data_pipeline_01(
         per_bin_normalization: If True, normalize per frequency bin; if False, global normalization
         seed: Random seed for reproducibility
         max_stats_samples: Optional limit on segments used for computing statistics
+        n_fft: FFT window size for spectrogram computation
+        hop_length: Hop length between frames for spectrogram computation
+        n_mels: Number of Mel frequency bins for spectrogram computation
+        min_db: Minimum dB value for clipping in spectrogram computation
     
     Directory structure created:
         output_dir/
@@ -416,7 +508,7 @@ def build_data_pipeline_01(
             val/ - TFRecords for validation set
             test/ - TFRecords for test set
             dataset_split.csv - Mapping of TFRecord paths to labels and splits
-            normalization_stats.json - Mean and std for normalization
+            normalization_stats.json - Mean, std, and spectrogram parameters
     """
     # Create output directories
     os.makedirs(output_dir, exist_ok=True)
@@ -430,6 +522,16 @@ def build_data_pipeline_01(
     log.info("="*80)
     log.info("STARTING AUDIO PREPROCESSING PIPELINE WITH DATASET-LEVEL NORMALIZATION")
     log.info("="*80)
+    # ========================================================================
+    # MODIFICATION 4bis: Log des paramètres de spectrogramme au début du pipeline
+    # pour la traçabilité et le debugging
+    # ========================================================================
+    log.info(f"Spectrogram configuration:")
+    log.info(f"  - n_fft: {n_fft}")
+    log.info(f"  - hop_length: {hop_length}")
+    log.info(f"  - n_mels: {n_mels}")
+    log.info(f"  - min_db: {min_db}")
+    log.info(f"  - sample_rate: {sample_rate}")
     
     # Step 1: Perform stratified split
     log.info("Step 1/4: Performing stratified train/val/test split...")
@@ -445,14 +547,39 @@ def build_data_pipeline_01(
     train_paths = dataset.iloc[train_idx]['path'].tolist()
     train_labels = dataset.iloc[train_idx]['label'].tolist()
     
+    # ========================================================================
+    # MODIFICATION 4ter: Passage des paramètres de spectrogramme à
+    # compute_dataset_statistics. Ces paramètres définissent comment les
+    # spectrogrammes sont calculés pour les statistiques de normalisation.
+    # ========================================================================
     mean, std = compute_dataset_statistics(
-        train_paths, train_labels, sample_rate=sample_rate,
-        per_bin=per_bin_normalization, max_samples=max_stats_samples
+        train_paths, 
+        train_labels, 
+        sample_rate=sample_rate,
+        per_bin=per_bin_normalization, 
+        max_samples=max_stats_samples,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        n_mels=n_mels,
+        min_db=min_db
     )
     
     # Save normalization statistics
     stats_path = os.path.join(output_dir, "normalization_stats.json")
-    save_normalization_stats(mean, std, stats_path)
+    # ========================================================================
+    # MODIFICATION 4quater: Passage des paramètres de spectrogramme à
+    # save_normalization_stats pour les sauvegarder dans le JSON.
+    # Cela permet de les réutiliser lors de l'inférence.
+    # ========================================================================
+    save_normalization_stats(
+        mean, 
+        std, 
+        stats_path,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        n_mels=n_mels,
+        min_db=min_db
+    )
     
     # Step 3: Process all splits with consistent normalization
     log.info("Step 3/4: Processing audio files and creating TFRecords...")
@@ -473,6 +600,15 @@ def build_data_pipeline_01(
         for idx_pos, idx in enumerate(indices):
             row = dataset.iloc[idx]
             tfrecord_path = os.path.join(split_dir, f"{idx_pos:06d}.tfrecord")
+            # ================================================================
+            # MODIFICATION 4quinquies: Passage des paramètres de spectrogramme
+            # à process_audio_to_tfrecord_with_norm pour CHAQUE split.
+            # 
+            # CRITIQUE: Les mêmes paramètres sont utilisés pour train, val ET test
+            # pour garantir que tous les spectrogrammes sont calculés de manière
+            # identique. Toute différence causerait des incohérences catastrophiques
+            # dans le pipeline de normalisation.
+            # ================================================================
             tasks.append((
                 row['path'],
                 int(row['label']),
@@ -480,7 +616,11 @@ def build_data_pipeline_01(
                 mean,
                 std,
                 per_bin_normalization,
-                sample_rate
+                sample_rate,
+                n_fft,           # Paramètre identique pour tous les splits
+                hop_length,      # Paramètre identique pour tous les splits
+                n_mels,          # Paramètre identique pour tous les splits
+                min_db           # Paramètre identique pour tous les splits
             ))
             
             # Store record info for CSV

@@ -225,7 +225,7 @@ def show_spectrogram_from_tfrecord(tfrecord_path: str, index: int = 0) -> None:
 
     if spectrogram is None:
         raise IndexError(f"Index {index} out of range for TFRecord {tfrecord_path}")
-
+    print(f"Spectrogram shape: {spectrogram.shape}")
     # Display the spectrogram
     plt.figure(figsize=(8, 4))
     plt.imshow(spectrogram, aspect='auto', origin='lower', cmap='magma')
@@ -258,10 +258,10 @@ if __name__ == "__main__":
 #     # )
     # clear_foler(".logs/")
     # clear_foler(r"C:\Users\colin\Documents\ETUDE\MAIN\UTC semestre 5  PK\Neural Networks\final_project\data\tfrecords")
-    # show_spectrogram_from_tfrecord(
-    #     tfrecord_path=r"data\tfrecords_32\000851.tfrecord",
-    #     index=0
-    # )
+    show_spectrogram_from_tfrecord(
+        tfrecord_path=r"data\tfrecords_32\test\000002.tfrecord",
+        index=0
+    )
 
-    show_class_distribution()
-    pass
+    # show_class_distribution()
+    # pass

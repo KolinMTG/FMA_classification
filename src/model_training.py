@@ -7,7 +7,7 @@ import pandas as pd
 from src.cste import *
 from src.logger import get_logger
 
-log = get_logger("model_training")
+log = get_logger("model_training.log")
 
 # ============================================================================
 # TFRECORD PARSING

@@ -73,7 +73,6 @@ DEFAULT_N_MELS : int = 32
 
 
 # Audio / Spectrogram
-N_MELS = 128
 NUM_CHANNELS = 1
 
 

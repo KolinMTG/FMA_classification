@@ -9,7 +9,7 @@ from logger import get_logger
 import pandas as pd
 from pathlib import Path
 import numpy as np
-from src.kaggle_api import download_kaggle_resource, authenticate_kaggle
+
 
 log = get_logger("data_utils.log")
 
@@ -112,11 +112,6 @@ def build_path_label_csv(csv_input_path: str, csv_output_path: str,
     Convert 'track_id' to full path, verify files exist (or download if missing), 
     encode genre as label, skip missing files, and ensure balanced classes.
     """
-    api = authenticate_kaggle()
-    if api is None:
-        log.error("Kaggle API authentication failed. Cannot proceed with downloading missing files.")
-        return
-
     df = pd.read_csv(csv_input_path)
 
     # Vérification existence ou téléchargement

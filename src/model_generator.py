@@ -90,7 +90,7 @@ def _register_model_csv(model_name, layers_desc, input_shape, output_units, opti
     df.to_csv(csv_path, index=False)
 
 
-def build_and_compile_model(
+def build_and_compile_model_03(
     model_name: str = ModelDefaults.NAME,
     input_shape: tuple = ModelDefaults.INPUT_SHAPE,
     output_units: int = ModelDefaults.OUTPUT_UNITS,
