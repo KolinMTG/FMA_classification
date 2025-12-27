@@ -31,6 +31,7 @@ def _check_model_name_unique(model_name, model_csv_path):
 def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_size, dense_layers, dense_activations, dropout_rates):
     """
     Construct a CNN for spectrograms and return model + layer description.
+    Uses GlobalMaxPooling2D to avoid dimension mismatch issues.
     """
     inputs = tf.keras.Input(shape=input_shape)
     x = inputs
@@ -46,9 +47,11 @@ def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_
             x = tf.keras.layers.Dropout(dropout)(x)
             layers_desc.append(f"dropout-{dropout}")
 
-    # --- Flatten + dense layers ---
-    x = tf.keras.layers.Flatten()(x)
-    layers_desc.append("flatten")
+    # --- Global pooling instead of flatten ---
+    x = tf.keras.layers.GlobalMaxPooling2D()(x)
+    layers_desc.append("global_max_pooling2d")
+
+    # --- Dense layers ---
     for neurons, activation in zip(dense_layers, dense_activations):
         x = tf.keras.layers.Dense(neurons, activation=activation)(x)
         layers_desc.append(f"dense-{neurons}-{activation}")
@@ -59,6 +62,7 @@ def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model, layers_desc
+
 
 
 

@@ -3,10 +3,14 @@ from pathlib import Path
 from typing import List
 
 # PC configuration
+RANDOM_SEED : int = 42
 NUM_WORKERS : int = 4  # Number of parallel workers for data processing
 
 # LOG directory path 
 LOG_DIR : Path= Path(".logs/")
+
+#Documentation and plot paths
+SAVE_PLOT_PATH:str = r"documents/plots/"
 
 # Kaggle dataset reference
 class KaggleDatasetRef:
@@ -44,11 +48,19 @@ PATH_LABEL_CSV_PATH = r"data/metadata/path_labels.csv"
 
 # About TFRecord output
 TFRECORD_OUTPUT_DIR = r"data/tfrecords/"
-TFRECORD_DIR = r"data/tfrecords"
+TFRECORD_OUTPUT_DIR_32 = r"data/tfrecords_32/"
+TFRECORD_OUTPUT_DIR_64 = r"data/tfrecords_64/"
 DATA_SPLIT_CSV_PATH = r"data/metadata/dataset_split.csv"
+DATA_SPLIT_CSV_PATH_32 = r"data/metadata/dataset_split_32.csv"
+DATA_SPLIT_CSV_PATH_64 = r"data/metadata/dataset_split_64.csv"
+DATA_SPLIT_CSV_BINARY_PATH = r"data/metadata/dataset_split_binary.csv"
+DATA_SPLIT_CSV_BINARY_PATH_32 = r"data/metadata/dataset_split_binary_32.csv"
+DATA_SPLIT_CSV_BINARY_PATH_64 = r"data/metadata/dataset_split_binary_64.csv"
 
-#CLASS_NUMBER
+#Data info about dataset pretreatments
 NB_CLASSES : int = 6
+SEGMENT_DURATION : float = 4.0  # in seconds duration of a segment (part of the audio file)
+SEGMENT_OVERLAP : float = 0.5    # overlap between segments 0.5 = 50% overlap, is  a good compromise between data augmentation and redundancy
 
 #About audio processing
 DEFAULT_SAMPLE_RATE : int = 22050
@@ -57,7 +69,7 @@ DEFAULT_OVERLAP : float = 0.5  # 50% overlap between segments
 
 DEFAULT_N_FFT : int = 2048
 DEFAULT_HOP_LENGTH : int = 512
-DEFAULT_N_MELS : int = 128
+DEFAULT_N_MELS : int = 32
 
 
 # Audio / Spectrogram
@@ -72,6 +84,7 @@ class TrainingConstants:
     BATCH_SIZE = 32
     EPOCHS = 30
     LEARNING_RATE = 1e-3
+    EARLY_STOPPING_PATIENCE = 5
 
 
 # Paths
@@ -115,4 +128,5 @@ class ModelDefaults:
 class ModelsCSV:
     REGISTRY: str = "models/models_registry.csv"
     TRAINING: str = "models/model_training.csv"
+    TRAINING_DIR: str = "models/trained_models/"
     PERFORMANCE: str = "models/model_performance.csv"

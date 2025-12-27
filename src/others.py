@@ -4,6 +4,9 @@ from cste import *
 from logger import get_logger
 import os
 import shutil
+import tensorflow as tf
+from typing import List
+import matplotlib.pyplot as plt
 import csv
 log = get_logger("others.log")
 
@@ -177,11 +180,88 @@ def suppress_default() -> None:
     suppress_useless(DEFAULT_DATA_TO_SUPPRESS)
 
 
+def show_spectrogram_from_tfrecord(tfrecord_path: str, index: int = 0) -> None:
+    """
+    Display a spectrogram from a TFRecord file.
+
+    Args:
+        tfrecord_path (str): Path to the TFRecord file containing serialized examples.
+        index (int): Index of the example in the TFRecord to display. Defaults to 0.
+
+    The TFRecord is assumed to contain features:
+        - 'spectrogram': raw bytes of the spectrogram (float32)
+        - 'height': height of the spectrogram
+        - 'width': width of the spectrogram
+    """
+    # Define the feature schema
+    feature_description = {
+        "spectrogram": tf.io.FixedLenFeature([], tf.string),
+        "height": tf.io.FixedLenFeature([], tf.int64),
+        "width": tf.io.FixedLenFeature([], tf.int64),
+        # 'label' can be parsed too if needed
+    }
+
+    # Create dataset from TFRecord
+    dataset = tf.data.TFRecordDataset(tfrecord_path)
+
+    # Parse function
+    def _parse_fn(example_proto):
+        parsed = tf.io.parse_single_example(example_proto, feature_description)
+        height = parsed["height"]
+        width = parsed["width"]
+        spectrogram = tf.io.decode_raw(parsed["spectrogram"], tf.float32)
+        spectrogram = tf.reshape(spectrogram, [height, width])
+        return spectrogram
+
+    # Parse all examples
+    parsed_dataset = dataset.map(_parse_fn)
+    
+    # Extract the specified example
+    spectrogram = None
+    for i, spec in enumerate(parsed_dataset):
+        if i == index:
+            spectrogram = spec.numpy()
+            break
+
+    if spectrogram is None:
+        raise IndexError(f"Index {index} out of range for TFRecord {tfrecord_path}")
+
+    # Display the spectrogram
+    plt.figure(figsize=(8, 4))
+    plt.imshow(spectrogram, aspect='auto', origin='lower', cmap='magma')
+    plt.colorbar(format="%+2.f dB")
+    plt.title(f"Spectrogram from {tfrecord_path}, example {index}")
+    plt.xlabel("Time frames")
+    plt.ylabel("Mel bins")
+    plt.show()
+
+def show_class_distribution(filtered_tracks_path:str=FILTERED_TRACK_PATH)-> None:
+    """Show class distribution from a filtered tracks CSV file."""
+    df = pd.read_csv(filtered_tracks_path)
+    genre_counts = df['genre'].value_counts()
+
+    plt.figure(figsize=(10, 6))
+    genre_counts.plot(kind='bar')
+    plt.title('Class Distribution')
+    plt.xlabel('Genre')
+    plt.ylabel('Number of Tracks')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
 #     # Example usage
 #     # document_tracks_header(
 #     #     tracks_csv_path=TRACK_PATH,
 #     #     documentation_path=r"documents/tracks_documentation.txt"
 #     # )
-    clear_foler(".logs/")
-    clear_foler(r"C:\Users\colin\Documents\ETUDE\MAIN\UTC semestre 5  PK\Neural Networks\final_project\data\tfrecords")
+    # clear_foler(".logs/")
+    # clear_foler(r"C:\Users\colin\Documents\ETUDE\MAIN\UTC semestre 5  PK\Neural Networks\final_project\data\tfrecords")
+    # show_spectrogram_from_tfrecord(
+    #     tfrecord_path=r"data\tfrecords_32\000851.tfrecord",
+    #     index=0
+    # )
+
+    show_class_distribution()
+    pass
