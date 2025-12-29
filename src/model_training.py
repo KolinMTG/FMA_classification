@@ -353,7 +353,7 @@ def save_model_and_log(
     model_save_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the model with timestamp
-    model_path = model_save_dir / f"{model_name}.h5"
+    model_path = model_save_dir / f"{model_name}_{timestamp}.keras"
     model.save(model_path)
     log.info(f"Model saved to: {model_path}")
 
