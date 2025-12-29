@@ -79,6 +79,7 @@ class OptimizationConfig:
 # ============================================================================
 
 class HyperparameterSpace:
+    # check documents/research_range
     """Defines the search space for model hyperparameters."""
     
     # Convolutional layer options

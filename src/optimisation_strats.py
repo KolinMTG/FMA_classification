@@ -20,7 +20,7 @@ def example_1_quick_test(tfrecord_dir=TFRECORD_OUTPUT_DIR_64):
     Quick test configuration - minimal resources, fast execution.
     Use this to test that everything works before a full run.
     
-    Estimated time: 30-60 minutes
+    Estimated time: 30-60 minutes on a standard machine with GPU, and 16GB RAM.
     """
     print("\n" + "="*80)
     print("EXAMPLE 1: QUICK TEST")
@@ -107,6 +107,8 @@ def example_3_thorough_search(tfrecord_dir=TFRECORD_OUTPUT_DIR_64):
     Requires 32GB+ RAM and significant compute time.
     
     Estimated time: 8-15 hours
+
+    !Note that this function have not been tested, because of resource limitations.
     """
     print("\n" + "="*80)
     print("EXAMPLE 3: THOROUGH SEARCH")
