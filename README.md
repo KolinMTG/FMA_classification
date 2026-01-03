@@ -1,7 +1,7 @@
 # Music Genre Classification from Audio Signals
 
 - **Date**: 2026-01-01
-- **Status**: In Progress
+- **Status**: In progress
 - **Author**: Colin MANYRI
 - **License**: MIT - Copyright (c) 2026 Colin MANYRI
 - **Version**: 10.0.0.1
@@ -27,24 +27,26 @@ The project enables building and training AI models using TensorFlow for classif
 - Definition and training of suitable baseline models
 - Hyperparameter optimization via Random Search and Neuroevolution
 - Evaluation and saving of the most effective models
+- Inference from a given trained model
 
 ## Repository Structure
 All source code is located in the `src` folder.  
 Training data is stored in the `data` folder, which must contain at least **FMA_medium** (the dataset used). The folder may also include:
 
 - `.logs`: project log files  
-- `.trash`: files deleted via functions in `src/others.py`  
+- `.trash`: files deleted via functions in [others.py](src/others.py)
 - Execution-generated folders such as `optimization_results`, `results_quick_test`, `results_tests`, `models`, containing trained models and associated information  
 
 Complete project documentation is located in the `documents` folder, including:
 
-- **model_evaluation.md**: detailed reflections on model evaluation (basis for extending the project)  
-- **optimization_documentation.md**: explanation of `model_optimization.py` and `optimisation_strats.py` responsible for baseline model optimization  
-- **project_structure.md**: description of files in `src` and their roles, with additional information on project data structures  
-- **rearch_range.md**: research range defined for improving the baseline using Random Search and Neuroevolution  
-- **strat_projet.md**: planned project steps, providing insight into design thinking prior to coding  
-- **tracks_documentation.md**: header format for the `tracks.csv` file located in `data/metadata`  
-- **Project_description.pdf**: original academic project brief and grading criteria
+- [model_evaluation.md](documents/model_evaluation.md): detailed reflexions on model evaluation (basis for extending the project)  
+- [optimisation_documentation.md](documents/optimisation_documentation.md): explanation of [model_optimization.py](src/model_optimization.py) and [optimisation_strats.py](src/optimisation_strats.py) responsible for baseline model optimization  
+- [project_structure.md](documents/project_structure.md): additional information on project data structures and source code structures
+
+- [research_range.md](documents/research_range.md): research range defined for improving the baseline using Random Search and Neuroevolution  
+- [strats_projet.md](documents/strat_projet.md): planned project steps, providing insight into design thinking prior to coding  
+- [tracks_documentation.md](documents/tracks_documentation.txt): header format for the [tracks.csv](data/metadata/tracks.csv)
+- [Project_description.pdf](documents/Project_Description.pdf): original academic project brief and grading criteria
 
 ## Installation
 
@@ -72,14 +74,31 @@ Local AI training is resource-intensive (CPU, GPU, and RAM). Recommended minimal
 - RAM: 16 GB DDR4
 - GPU: RTX 4060 Ti
 
+### Data uploading
+This project use external data. 
+**/!\\** This repository does not contains these data.
+
+You need to go on Kaggle to download following dataset. The minimal data requiered are : 
+
+- **FMA_medium** folder
+- **metadata** folder (complete)
+
+Please save the previous folder at the following respective path : 
+- `{repository}/data/FMA_medium`
+- `{repository}/data/metadata`
+
+To prevent any issue, please add these folder without with the given names in the `data` folder. In case of issue in the code, please check the constant folder [cste.py](src/cste.py) and especialy `FMA_SMALL_PATH` and all constants which start with `data/metadata/`
+
+
+
 ## External Elements / Citations
 
-This project uses the FMA Medium (Free Music Archive) dataset, available on Kaggle  [Kaggle](https://www.kaggle.com/datasets/imsparsh/fma-free-music-archive-small-medium)
+This project uses the FMA Medium (Free Music Archive) dataset, available on Kaggle : [FMA  - Free Music Archive - Small & Medium](https://www.kaggle.com/datasets/imsparsh/fma-free-music-archive-small-medium).
 
 The dataset was presented by Michaël Defferrard, Kirell Benzi, Pierre Vandergheynst, and Xavier Bresson at ISMIR 2017.
 **Copyright (c) 2016 Michaël Defferrard**
 
 ## Contact / Support / Author
 
-For questions or issues regarding code execution, contact:
-Colin MANYRI: colin.manyri@etu.utc.fr
+For questions or issues regarding code execution, contact(s):
+- Colin MANYRI: colin.manyri@etu.utc.fr
