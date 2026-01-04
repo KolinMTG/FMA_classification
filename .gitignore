@@ -3,6 +3,8 @@
 
 # Data and logs
 data/
+# data/FMA_medium/
+# data/metadata/
 .logs/
 
 # Model checkpoints

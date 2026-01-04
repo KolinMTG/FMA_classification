@@ -1,179 +1,217 @@
-# Strategie pour le projet 
 
-## 1. Contraintes fondamentales à prendre en compte
+# Strategy for the Project
 
-Avant toute stratégie, il faut poser les contraintes réelles.
-### Contraintes matérielles
-- CPU limité (i7 11th gen pc portable)
-- Pas de GPU local
-- mémoire finie (16Go)
-- temps de calcul non négligeable par entraînement
+## 1. Fundamental constraints to consider
 
-*Cela impose :*
-- entraînement partiel
-- élimination rapide
-- pas de grid search exhaustif
+Before defining any strategy, we need to clearly state the real constraints.
 
-### Contraintes données
-- audio coûteux à traiter
-- dataset volumineux
+### Hardware constraints
 
-*Cela impose :*
-- prétraitement unique et figé
-- séparation stricte train / val / test
+* Limited CPU (i7 11th gen laptop)
+* No local GPU
+* Limited memory (16 GB)
+* Significant computation time per training run
 
-### Contraintes scientifiques
-- éviter le surapprentissage
-- éviter le data leakage
-- métriques comparables entre expériences
+*This implies:*
 
-## 2. Ce qui est réellement optimisable
+* partial training
+* early elimination strategies
+* no exhaustive grid search
 
-Il est important de distinguer ce qui est structurel de ce qui est paramétrable.
+### Data constraints
 
-### Non optimisable (à fixer une fois)
-- type de représentation audio (log-Mel)
-- durée des segments
-- fréquence d’échantillonnage
-- protocole de split
+* audio is expensive to process
+* dataset is large
+
+*This implies:*
+
+* preprocessing must be done once and frozen
+* strict separation between train / val / test
+
+### Scientific constraints
+
+* avoid overfitting
+* avoid data leakage
+* metrics must be comparable across experiments
+
+---
+
+## 2. What can actually be optimized
+
+It is important to distinguish what is structural from what is tunable.
+
+### Not optimizable (fixed once)
+
+* type of audio representation (log-Mel)
+* segment duration
+* sampling rate
+* split protocol
+
+### Optimizable
+
+* CNN architecture
+* learning rate
+* batch size
+* regularization
+* learning rate scheduler
+* model depth
+
+---
+
+## 3. Main stages of the project
+
+* audio extraction → once
+* TFRecord conversion → once
+* train/val/test split → once
+
+Everything else should be iterative.
+
+---
+
+## 4. Planned global pipeline (overview)
+
+### Step 0 — Cleaning the initial dataset
+
+Select the audio to be used first.
+
+* choosing classes
+* checking existing files
+* strict balancing
+* label ↔ index mapping
+* final CSV generation
+
+**Implemented by: [data_utils](../src/data_utils.py)** 
+
+---
+
+### Step 1 — Feature extraction for selected audio
+
+* TFRecord generation
+* the dataset becomes fixed
+
+**Implemented by: [data_pretreat.py](../src/data_pretreat.py)**
+
+---
+
+### Step 2 — Final dataset split
+
+**Goal: ensure clean evaluation.**
+
+* split into train / val / test
+* test set never used during optimization
+* store split indices
+
+**Implemented by:  [data_pretreat.py](../src/data_pretreat.py)**
+
+---
+
+### Step 3 — Define the search space
+
+Before training anything, define:
+
+* realistic bounds
+* discrete vs continuous parameters
+* constraints (e.g., maximum model size)
+
+**See file: [research_range.md](research_range.md)**
+
+---
+
+### Step 4 — Baseline model
+
+Goal: provide a comparison reference.
+
+* simple CNN
+* full training
+* reference metrics
+
+**Implemented by: [cste.py](../src/cste.py) and [model_generator.py](../src/model_generator.py)**
+
+---
+
+### Step 5 — Fast evaluation (fitness proxy)
+
+For each candidate:
+
+* partial training
+* using train + val
+* aggressive early stopping
+* few epochs
+
+The metric is not final performance, but:
+the ability to learn quickly without diverging.
+
+**Implemented by : [model_generator.py](../src/model_generator.py), [model_evaluation.py](../src/model_evaluation.py) and [model_optimization.py](../src/model_optimization.py)**
+
+---
+
+### Step 6 — Hyperparameter optimization
+
+Regardless of the algorithm (GA, Hyperband, PBT), the logic is the same:
+
+* generate candidates
+* evaluate quickly
+* eliminate the worst
+* focus resources on the most promising ones
+
+**IMPORTANT: log every experiment and version all tested configs**
+**Implemented by : [model_generator.py](../src/model_generator.py), [model_evaluation.py](../src/model_evaluation.py), [optimisation_strats.py](../src/optimisation_strats.py) and [model_optimization.py](../src/model_optimization.py)** 
+
+---
+
+### Step 7 — Final selection
+
+Select a stable architecture for the project.
+The choice must be justified (not only best accuracy).
+
+Reminder: Stability > raw performance.
+A slightly weaker model but stable is preferable.
+
+**Implemented by : [model_generator.py](../src/model_generator.py), [model_evaluation.py](../src/model_evaluation.py) and [model_optimization.py](../src/model_optimization.py)**
+
+---
+
+### Step 8 — Final long training
+
+Only now:
+
+* full dataset
+* higher number of epochs
+* full callbacks
+* checkpoints
+* detailed monitoring
+
+This is the only “expensive” training.
+
+**Implemented by : [model_generator.py](../src/model_generator.py), [model_evaluation.py](../src/model_evaluation.py) and [model_optimization.py](../src/model_optimization.py)**
+
+---
+
+### Step 9 — Final evaluation on the test set
+
+Absolute rule:
+
+The test set is used only once.
+
+You produce:
+
+* accuracy
+* confusion matrix
+* precision / recall per class
 
 
-### Optimisable
-- architecture CNN
-- learning rate
-- batch size
-- régularisation
-- scheduler
-- profondeur du modèle
+**Implemented by : [model_generator.py](../src/model_generator.py), [model_evaluation.py](../src/model_evaluation.py) and [model_optimization.py](../src/model_optimization.py)**
 
 
-## 3. Différentes étapes du projet 
 
-- extraction audio → une fois
-- conversion TFRecord → une fois
-- split train/val/test → une fois
+### Step 10  : Inference on new data
 
-Tout le reste doit être itératif.
+From a new .mp3 file, be able to pretreate it, extract data from audio file according to a prevous pretreatement pipeline to fit training data. Do a prediction on a trained model and produce a report for a evaluated data. 
 
-## 4. Pipeline global prévue (vue d’ensemble)
+**Implemented by  : [inference.py](../src/inference.py)**
 
+### Step 11 : Main pipeline 
 
-### Etape 0 - Netoyage des données du dataset initial
-Permet de selectionner les données : les audio à exploiter en priorité.
+Put all the prevous step in an automatic pipeline. 
 
-- sélection des classes
-- vérification des fichiers audio existants
-- équilibrage strict
-- mapping label ↔ index
-- génération CSV final
-
-**Réalisé par la fonction : build_csv_pipeline_00**
-
-### Étape 1 — Extraction des features pour les audio séléctionnés
-
-- Génération TFRecords
-- Le dataset ne bouge plus
-
-**Réalisé par la fonction: build_tfrecord_from_dataframe_01**
-
-
-### Étape 2 — Split définitif du dataset
-
-**Objectif : garantir une évaluation propre.**
-- split train / val / test
-- test set jamais utilisé pendant l’optimisation
-- stocker les index de split
-
-**Réalisé par la fonction : data_split_pipeline (fichier data_split)**
-
-
-### Étape 3 — Définition d’un espace de recherche
-
-Avant d’entraîner quoi que ce soit, définir :
-- bornes réalistes
-- paramètres discrets / continus
-- contraintes (ex: taille max du modèle)
-
-**Voir fichier research_range.md**
-
-### Étape 4 — Modèle de base (baseline)
-
-Objectif : avoir un point de comparaison.
-
-- CNN simple
-- entraînement complet
-- métriques de référence
-
-**Réalisé par la fonction : A CODER**
-
-
-### Étape 5 — Évaluation rapide (fitness proxy)
-
-
-Chaque candidat :
-
-- est entraîné partiellement
-- sur train + val
-- avec early stopping agressif
-- sur peu d’epochs
-
-La métrique n’est pas la performance finale, mais :
-la capacité à apprendre rapidement sans diverger
-
-**Réalisé par la fonction : A CODER**
-
-### Étape 6 — Optimisation des hyperparamètres
-
-Peu importe l’algorithme (GA, Hyperband, PBT), la logique est la même :
-
-- générer des candidats
-- évaluer rapidement
-- éliminer les pires
-- concentrer les ressources sur les meilleurs
-
-**IMPORTANT : loguer toutes les expériences et versionner les config testés**
-**Réalisé par la fonction : A CODER**
-
-### Étape 7 — Sélection finale
-
-Séléction d'une architecture stable pour le porjet
-Ce choix doit être justifiable (pas juste la meilleure accuracy).
-
-Rappel : Stabilité > performance brute
-Un modèle légèrement moins performant mais stable est préférable.
-
-**A mettre dans le rapport**
-
-### Étape 8 — Entraînement final long
-
-Seulement maintenant :
-
-- dataset complet
-- epochs élevés
-- callbacks complets
-- checkpoints
-- monitoring fin
-
-C’est le seul entraînement “cher”.
-
-### Étape 9 — Évaluation finale sur le test set
-
-Règle absolue :
-
-le test set n’est utilisé qu’une seule fois
-Tu produis :
-- accuracy
-- confusion matrix
-- précision / rappel par classe
-
-
-## 6. Stratégie optimale pour le projet
-
-Compte tenu de ton contexte :
-
-1. pipeline figée avec TFRecords
-2. CNN simple mais robuste
-3. optimisation sur entraînement partiel
-4. élimination rapide
-5. entraînement final unique
-6. analyse qualitative des erreurs
+**Implemented by : [main_pipeline.py](../src/main_pipeline.py)**

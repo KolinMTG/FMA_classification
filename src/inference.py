@@ -475,10 +475,14 @@ def predict_genre_batch(
     label_mapping_path: str,
     audio_paths: List[str],
     output_dir: str = "predictions",
-    **kwargs
+    segment_duration: float = 3.0,
+    overlap: float = 0.5,
+    aggregation_method: str = "soft_voting"
 ) -> pd.DataFrame:
     """
     Predict genres for multiple audio files.
+    
+    Generates one prediction report per audio file automatically.
     
     Parameters
     ----------
@@ -491,14 +495,30 @@ def predict_genre_batch(
     audio_paths : List[str]
         List of audio file paths to process.
     output_dir : str, default='predictions'
-        Directory to save individual reports.
-    **kwargs
-        Additional arguments passed to predict_genre().
+        Directory to save individual reports and summary.
+    segment_duration : float, default=3.0
+        Duration of each audio segment in seconds.
+    overlap : float, default=0.5
+        Overlap ratio between segments (0.0 to 1.0).
+    aggregation_method : str, default='soft_voting'
+        Method for aggregating segment predictions.
     
     Returns
     -------
     pd.DataFrame
         DataFrame with prediction results for all files.
+    
+    Example
+    -------
+    >>> model = tf.keras.models.load_model('models/best_model.keras')
+    >>> audio_files = ['song1.mp3', 'song2.mp3', 'song3.mp3']
+    >>> results_df = predict_genre_batch(
+    ...     model=model,
+    ...     normalization_stats_path='data/normalization_stats.json',
+    ...     label_mapping_path='data/label_mapping.csv',
+    ...     audio_paths=audio_files,
+    ...     output_dir='predictions'
+    ... )
     """
     os.makedirs(output_dir, exist_ok=True)
     results_list = []
@@ -509,38 +529,50 @@ def predict_genre_batch(
         logger.info(f"{'='*80}")
         
         try:
+            # Generate report path automatically based on audio filename
             audio_name = Path(audio_path).stem
             report_path = os.path.join(output_dir, f"{audio_name}_report.txt")
             
+            # Run prediction with explicit parameters (no **kwargs)
             result = predict_genre(
                 model=model,
                 normalization_stats_path=normalization_stats_path,
                 label_mapping_path=label_mapping_path,
                 audio_path=audio_path,
-                output_report_path=report_path,
-                **kwargs
+                segment_duration=segment_duration,
+                overlap=overlap,
+                aggregation_method=aggregation_method,
+                output_report_path=report_path
             )
             
             results_list.append({
                 'audio_path': audio_path,
+                'audio_filename': Path(audio_path).name,
                 'predicted_label': result['predicted_label'],
                 'confidence': result['confidence'],
-                'num_segments': result['num_segments_analyzed']
+                'num_segments': result['num_segments_analyzed'],
+                'report_path': report_path
             })
             
         except Exception as e:
             logger.error(f"ERROR processing {audio_path}: {e}")
             results_list.append({
                 'audio_path': audio_path,
+                'audio_filename': Path(audio_path).name,
                 'predicted_label': 'ERROR',
                 'confidence': 0.0,
-                'num_segments': 0
+                'num_segments': 0,
+                'report_path': 'N/A'
             })
     
+    # Create summary DataFrame
     df_results = pd.DataFrame(results_list)
     summary_path = os.path.join(output_dir, "batch_predictions_summary.csv")
     df_results.to_csv(summary_path, index=False)
     logger.info(f"\nBatch summary saved: {summary_path}")
+    logger.info(f"Total processed: {len(audio_paths)} files")
+    logger.info(f"Successful: {(df_results['predicted_label'] != 'ERROR').sum()} files")
+    logger.info(f"Failed: {(df_results['predicted_label'] == 'ERROR').sum()} files")
     
     return df_results
 
@@ -555,32 +587,19 @@ if __name__ == "__main__":
         r"data/FMA_medium/fma_medium/000/000003.mp3",
         r"data/FMA_medium/fma_medium/000/000004.mp3",
         r"data/FMA_medium/fma_medium/000/000005.mp3"
-
     ]
+    output_reports_path = [r"predictions/000002_report.txt", r"predictions/000003_report.txt", r"predictions/000004_report.txt", r"predictions/000005_report.txt"]
     
     # Load model
     model = tf.keras.models.load_model(model_path)
 
-    result = predict_genre(
+    result = predict_genre_batch(
         model=model,
         normalization_stats_path=normalization_stats_path,
         label_mapping_path=label_mapping_path,
-        audio_path=audio_files_list[0],
+        audio_paths=audio_files_list,
+        output_dir="predictions",
         segment_duration=3.0,
         overlap=0.5,
-        aggregation_method="soft_voting",
-        output_report_path=r"predictions/unknown_song_report.txt",
+        aggregation_method="soft_voting"
     )
-    
-    # Predict genre
-    # result = predict_genre_batch(
-    #     model=model,
-    #     normalization_stats_path=normalization_stats_path,
-    #     label_mapping_path=label_mapping_path,
-    #     audio_paths=audio_files_list,
-    #     segment_duration=3.0,
-    #     overlap=0.5,
-    #     aggregation_method="soft_voting",
-    #     output_report_path=r"predictions/unknown_song_report.txt",
-    # )
-

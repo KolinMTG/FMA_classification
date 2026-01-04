@@ -14,10 +14,10 @@ import pandas as pd
 def main_pipeline() -> None:
     """"""
     #! 00 Create dataset to pretreat to extract features from audio files
-    # # build_csv_pipeline_00() #? in module src/data_utils.py 
+    # build_csv_pipeline_00() #? in module src/data_utils.py
 
-    # # #! 01 Pretreat dataset to extract features and build TFRecord files
-    # # #! Split the dataset into train, val, test sets
+    # # # #! 01 Pretreat dataset to extract features and build TFRecord files
+    # # # #! Split the dataset into train, val, test sets
 
     # dataset_df = pd.read_csv(PATH_LABEL_CSV_PATH)
     # build_data_pipeline_01(
@@ -127,8 +127,9 @@ def main_pipeline() -> None:
     # )
 
     #! 05 Optimize model architecture and hyperparameters with optimization pipeline
-    example_1_quick_test()
-    analyze_results("results_quick_test")
+    # example_2_standard_run()
+    example_0_pipeline_test(tfrecord_dir=TFRECORD_OUTPUT_DIR_64)
+    analyze_results()
 
 
 if __name__ == "__main__":

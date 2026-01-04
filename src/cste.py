@@ -46,6 +46,9 @@ TRACK_PATH = r"data/metadata/tracks.csv"
 FILTERED_TRACK_PATH = r"data/metadata/filtered_tracks.csv"
 PATH_LABEL_CSV_PATH = r"data/metadata/path_labels.csv"
 
+# Mapping genre to label
+MAPPING_GENRE_LABEL_CSV_PATH = r"data/metadata/label_mapping.csv"
+
 # About TFRecord output
 TFRECORD_OUTPUT_DIR = r"data/tfrecords/"
 TFRECORD_OUTPUT_DIR_32 = r"data/tfrecords_32/"
@@ -104,8 +107,8 @@ class SplitLabels:
 # Model defaults parameters
 class ModelDefaults:
     NAME = "cnn_spectrogram"
-    INPUT_SHAPE = (128, 173, 1)   # height, width, channels (ex: 4s audio spectrogram)
-    OUTPUT_UNITS = 6              # nombre de classes
+    INPUT_SHAPE = (64, 173, 1)   # height, width, channels (ex: 4s audio spectrogram)
+    OUTPUT_UNITS = 6              # number of classes
     CONV_LAYERS = [               # tuples (filters, kernel_size)
         (32, (3,3)),
         (64, (3,3)),

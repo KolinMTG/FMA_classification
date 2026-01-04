@@ -9,6 +9,7 @@ from logger import get_logger
 import pandas as pd
 from pathlib import Path
 import numpy as np
+import json
 
 
 log = get_logger("data_utils.log")
@@ -44,6 +45,188 @@ def id_to_kaggle_file(track_id:str)-> str:
     medium_dataset_folder = KaggleDatasetRef.MEDIUM_DATASET_FOLDER
     full_path = medium_dataset_folder + folder + "/" + file_name
     return full_path
+
+
+
+def compute_input_shape(
+    normalization_file: str,
+    audio_duration: float,
+    channels: int = 1,
+    verbose: bool = False
+) -> Tuple[int, int, int]:
+    """
+    Compute CNN model INPUT_SHAPE from a normalization statistics file.
+    
+    Args:
+        normalization_file: Path to JSON statistics file
+        audio_duration: Audio duration in seconds (all recordings must have same length)
+        channels: Number of channels (1 for mono, 3 for RGB-like)
+        verbose: Display computation information
+    
+    Returns:
+        Tuple (height, width, channels) representing INPUT_SHAPE
+    
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        KeyError: If required keys are missing
+        ValueError: If values are invalid
+    
+    Example:
+        >>> input_shape = compute_input_shape("stats.json", audio_duration=4.0)
+        >>> print(input_shape)
+        (128, 345, 1)
+    """
+    
+    # 1. Load JSON file
+    norm_path = Path(normalization_file)
+    if not norm_path.exists():
+        raise FileNotFoundError(f"File not found: {normalization_file}")
+    
+    with open(norm_path, 'r') as f:
+        stats = json.load(f)
+    
+    # 2. Extract required parameters
+    required_keys = ['n_mels', 'hop_length', 'sample_rate']
+    missing_keys = [k for k in required_keys if k not in stats]
+    if missing_keys:
+        raise KeyError(f"Missing keys in JSON file: {missing_keys}")
+    
+    n_mels = stats['n_mels']
+    hop_length = stats['hop_length']
+    sample_rate = stats['sample_rate']
+    
+    # Validate values
+    if n_mels <= 0 or hop_length <= 0 or sample_rate <= 0:
+        raise ValueError(f"Invalid values: n_mels={n_mels}, "
+                        f"hop_length={hop_length}, sample_rate={sample_rate}")
+    
+    if audio_duration <= 0:
+        raise ValueError(f"Invalid audio duration: {audio_duration}")
+    
+    # 3. Compute height (frequency dimension)
+    height = n_mels
+    
+    # 4. Compute width (temporal dimension)
+    # Formula: n_frames = floor(n_samples / hop_length) + 1
+    n_samples = int(sample_rate * audio_duration)
+    width = (n_samples // hop_length) + 1
+    
+    # 5. Build shape
+    input_shape = (height, width, channels)
+    
+    # 6. Display information if requested
+    if verbose:
+        print("="*60)
+        print("INPUT_SHAPE COMPUTATION")
+        print("="*60)
+        print(f"Normalization file: {normalization_file}")
+        print(f"\nExtracted parameters:")
+        print(f"  - n_mels (mel bins)    : {n_mels}")
+        print(f"  - hop_length           : {hop_length}")
+        print(f"  - sample_rate          : {sample_rate} Hz")
+        print(f"  - n_fft                : {stats.get('n_fft', 'N/A')}")
+        print(f"\nAudio duration         : {audio_duration:.3f} seconds")
+        print(f"Total samples          : {n_samples}")
+        print(f"\nWidth computation:")
+        print(f"  width = floor({n_samples} / {hop_length}) + 1")
+        print(f"        = {width} frames")
+        print(f"\nFinal INPUT_SHAPE      : {input_shape}")
+        print(f"  - Height (frequency) : {height}")
+        print(f"  - Width (time)       : {width}")
+        print(f"  - Channels           : {channels}")
+        print("="*60)
+    
+    return input_shape
+
+
+def compute_duration_from_width(
+    width: int,
+    hop_length: int,
+    sample_rate: int
+) -> float:
+    """
+    Compute audio duration corresponding to a given spectrogram width.
+    
+    Args:
+        width: Number of temporal frames
+        hop_length: Hop between frames
+        sample_rate: Sampling rate
+    
+    Returns:
+        Duration in seconds
+    
+    Example:
+        >>> duration = compute_duration_from_width(173, 256, 22050)
+        >>> print(f"{duration:.2f}s")
+        2.01s
+    """
+    n_samples = (width - 1) * hop_length
+    duration = n_samples / sample_rate
+    return duration
+
+
+def suggest_optimal_shapes(
+    normalization_file: str,
+    target_durations: list = [1.0, 2.0, 3.0, 4.0, 5.0]
+) -> dict:
+    """
+    Suggest multiple optimal INPUT_SHAPE for different audio durations.
+    
+    Args:
+        normalization_file: Path to JSON file
+        target_durations: List of durations to test
+    
+    Returns:
+        Dictionary with suggested shapes
+    
+    Example:
+        >>> suggestions = suggest_optimal_shapes("stats.json")
+        >>> for duration, shape in suggestions.items():
+        ...     print(f"{duration}s -> {shape}")
+    """
+    with open(normalization_file, 'r') as f:
+        stats = json.load(f)
+    
+    n_mels = stats['n_mels']
+    hop_length = stats['hop_length']
+    sample_rate = stats['sample_rate']
+    
+    suggestions = {}
+    
+    print("="*70)
+    print("OPTIMAL INPUT_SHAPE SUGGESTIONS")
+    print("="*70)
+    print(f"Parameters: n_mels={n_mels}, hop_length={hop_length}, sr={sample_rate}")
+    print(f"\n{'Duration':<10} {'Shape':<20} {'Width':<10} {'Format':<15}")
+    print("-"*70)
+    
+    for duration in target_durations:
+        n_samples = int(sample_rate * duration)
+        width = (n_samples // hop_length) + 1
+        shape = (n_mels, width, 1)
+        
+        # Determine if it's square or close to square
+        ratio = width / n_mels
+        if abs(ratio - 1.0) < 0.1:
+            format_type = "Square ✓"
+        elif width > n_mels * 1.5:
+            format_type = "Wide rectangle"
+        elif width < n_mels * 0.7:
+            format_type = "Tall rectangle"
+        else:
+            format_type = "Near-square"
+        
+        suggestions[duration] = shape
+        print(f"{duration:.1f}s{'':<5} {str(shape):<20} {width:<10} {format_type:<15}")
+    
+    print("="*70)
+    print("\nRecommendation: Prefer square or near-square formats")
+    print("for better CNN performance with pooling layers.")
+    print("="*70)
+    
+    return suggestions
+
+
 
 def create_main_genres(raw_genres_path:str)->None:
     """Args : 
@@ -111,6 +294,8 @@ def build_path_label_csv(csv_input_path: str, csv_output_path: str,
     """
     Convert 'track_id' to full path, verify files exist (or download if missing), 
     encode genre as label, skip missing files, and ensure balanced classes.
+    
+    Also generates a label_mapping.csv file with the genre-to-label mapping.
     """
     df = pd.read_csv(csv_input_path)
 
@@ -132,14 +317,27 @@ def build_path_label_csv(csv_input_path: str, csv_output_path: str,
     genre2id = {g: i for i, g in enumerate(unique_genres)}
     df['label'] = df['genre'].map(genre2id)
 
+    # ========================================================================
+    # NOUVEAU : Créer et sauvegarder le fichier de mapping genre/label
+    # ========================================================================
+    mapping_df = pd.DataFrame({
+        'genre': list(genre2id.keys()),
+        'label': list(genre2id.values())
+    })
+    
+    # Sauvegarder dans le même dossier que le CSV de sortie
+    mapping_output_path = MAPPING_GENRE_LABEL_CSV_PATH
+    mapping_df.to_csv(mapping_output_path, index=False)
+    log.info(f"Label mapping saved: {mapping_output_path}")
+    log.info(f"Mapping: {dict(zip(mapping_df['genre'], mapping_df['label']))}")
+    # ========================================================================
+
     # Ensure balanced classes
     min_count = df['label'].value_counts().min()
     df = df.groupby('label').apply(lambda x: x.sample(n=min_count, random_state=42)).reset_index(drop=True)
     df = df[['path', 'label']]
 
-    # Sauvegarde du CSV final
-    csv_output_path = Path(csv_output_path)
-    csv_output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Save final CSV
     df.to_csv(csv_output_path, index=False)
     log.info(f"Final path/label CSV saved: {csv_output_path} ({len(df)} entries, {min_count} per class)")
 
@@ -156,7 +354,7 @@ def build_csv_pipeline_00():
 
     build_path_label_csv(
         csv_input_path=FILTERED_TRACK_PATH,
-        csv_output_path=PATH_LABEL_CSV_PATH
+        csv_output_path=PATH_LABEL_CSV_PATH,
     )
 
 

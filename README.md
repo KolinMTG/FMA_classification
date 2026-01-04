@@ -17,7 +17,7 @@ The dataset was introduced by **Michaël Defferrard, Kirell Benzi, Pierre Vander
 - **Project Context**: Academic
 - **Dataset Year**: 2025
 
-## Project Objective
+## Project Goal
 This project aims to design and analyze a complete **automatic music genre classification pipeline** from raw audio signals. The focus is on mastering the **entire pipeline**, from loading audio files to evaluating model performance, without using precomputed features.
 
 The project enables building and training AI models using TensorFlow for classification of the main classes of the FMA dataset. Key steps include audio preprocessing, feature extraction, TFRecord generation, baseline model definition, hyperparameter optimization via Random Search and Neuroevolution, and evaluation of the best-performing models.

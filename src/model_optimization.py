@@ -7,10 +7,7 @@ This script implements a hybrid optimization strategy combining:
 2. NeuroEvolution for iterative architecture refinement
 3. Comprehensive evaluation and logging
 
-Designed for limited computational resources (16GB RAM).
-
-Author: AI Assistant
-Date: 2025-12-27
+VERSION: 2.0 - Enhanced with complete model saving and registry tracking
 """
 
 import os
@@ -23,14 +20,15 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import tensorflow as tf
 from dataclasses import dataclass, asdict
+from sklearn.metrics import classification_report, confusion_matrix
 import copy
 
 # Import project modules
 from src.cste import *
 from src.logger import get_logger
+from src.data_utils import compute_input_shape
 from model_generator import build_and_compile_model_03
 from model_training import train_model_pipeline_04, evaluate_model_on_test
-from src.cste import *
 
 log = get_logger("model_optimization")
 
@@ -46,32 +44,54 @@ class OptimizationConfig:
     # Data paths
     tfrecord_dir: str = TFRECORD_OUTPUT_DIR
     
+    # Input shape will be computed in __post_init__
+    input_shape: Tuple[int, int, int] = None
+    
     # Resource constraints
-    batch_size: int = 32  # Moderate batch size for 16GB RAM
-    partial_training_epochs: int = 10  # Few epochs for quick evaluation
-    full_training_epochs: int = 50  # Full training for best model
+    batch_size: int = 32
+    partial_training_epochs: int = 10
+    full_training_epochs: int = 50
     early_stopping_patience: int = 5
     
     # Random/Grid Search
-    random_search_iterations: int = 10  # Number of random configurations to try
+    random_search_iterations: int = 10
     
     # NeuroEvolution
-    population_size: int = 8  # Number of models per generation (4-16)
-    num_generations: int = 5  # Number of evolution cycles
-    mutation_rate: float = 0.3  # Probability of mutation
-    selection_ratio: float = 0.5  # Top 50% survive to next generation
+    population_size: int = 8
+    num_generations: int = 5
+    mutation_rate: float = 0.3
+    selection_ratio: float = 0.5
     
     # Output paths
     output_dir: str = "optimization_results"
     models_dir: str = "optimization_results/models"
     logs_dir: str = "optimization_results/logs"
     
-    # Model registry
-    optimization_log_csv: str = "optimization_results/optimization_log.csv"
-    generation_log_csv: str = "optimization_results/generation_log.csv"
-    
     # Random seed
     random_seed: int = 42
+    
+    def __post_init__(self):
+        """Compute input_shape after instance creation."""
+        if self.input_shape is None:
+            normalization_file = os.path.join(self.tfrecord_dir, "normalization_stats.json")
+            
+            if not os.path.exists(normalization_file):
+                log.warning(f"Normalization file not found: {normalization_file}")
+                log.warning(f"Using default INPUT_SHAPE from ModelDefaults")
+                self.input_shape = ModelDefaults.INPUT_SHAPE
+            else:
+                try:
+                    self.input_shape = compute_input_shape(
+                        normalization_file=normalization_file,
+                        audio_duration=SEGMENT_DURATION,
+                        channels=NUM_CHANNELS,
+                        verbose=False
+                    )
+                    log.info(f"Computed INPUT_SHAPE: {self.input_shape}")
+                except Exception as e:
+                    log.error(f"Error computing input_shape: {e}")
+                    log.info(f"Using default INPUT_SHAPE from ModelDefaults")
+                    self.input_shape = ModelDefaults.INPUT_SHAPE
 
 
 # ============================================================================
@@ -79,7 +99,6 @@ class OptimizationConfig:
 # ============================================================================
 
 class HyperparameterSpace:
-    # check documents/research_range
     """Defines the search space for model hyperparameters."""
     
     # Convolutional layer options
@@ -96,7 +115,7 @@ class HyperparameterSpace:
     DROPOUT_RATES = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
     
     # Training hyperparameters
-    LEARNING_RATES = [0.0001, 0.0005, 0.001, 0.005]
+    LEARNING_RATES = [0.0005, 0.001, 0.005, 0.01]
     
     # Architecture depth
     MIN_CONV_LAYERS = 2
@@ -186,6 +205,15 @@ class ModelConfig:
     test_loss: Optional[float] = None
     epochs_trained: int = 0
     
+    # ✨ MODIFICATION 1: Nouveaux champs pour le registry
+    timestamp: Optional[str] = None
+    model_name: Optional[str] = None
+    model_path: Optional[str] = None
+    dataset_csv_path: Optional[str] = None
+    batch_size: Optional[int] = None
+    framework: str = "tensorflow"
+    notes: Optional[str] = None
+    
     def to_dict(self) -> Dict:
         """Convert to dictionary for logging."""
         return asdict(self)
@@ -208,7 +236,6 @@ class MutationOperators:
     def mutate_learning_rate(config: ModelConfig, mutation_rate: float) -> ModelConfig:
         """Mutate learning rate (small change, high probability)."""
         if random.random() < mutation_rate:
-            # Multiply by random factor between 0.5 and 2.0
             factor = random.uniform(0.5, 2.0)
             config.learning_rate = np.clip(
                 config.learning_rate * factor,
@@ -314,10 +341,8 @@ class MutationOperators:
     @staticmethod
     def mutate(config: ModelConfig, mutation_rate: float) -> ModelConfig:
         """Apply all mutation operators to a config."""
-        # Create a deep copy to avoid modifying original
         mutated = copy.deepcopy(config)
         
-        # Apply mutations with different probabilities
         mutated = MutationOperators.mutate_learning_rate(mutated, mutation_rate)
         mutated = MutationOperators.mutate_dropout(mutated, mutation_rate)
         mutated = MutationOperators.mutate_conv_filters(mutated, mutation_rate)
@@ -336,7 +361,7 @@ class MutationOperators:
 # ============================================================================
 
 class ModelEvaluator:
-    """Handles model training and evaluation."""
+    """Handles model training and evaluation with detailed per-class metrics."""
     
     def __init__(self, config: OptimizationConfig):
         self.config = config
@@ -346,7 +371,9 @@ class ModelEvaluator:
         model_config: ModelConfig,
         epochs: int,
         model_name: str,
-        save_model: bool = False
+        save_model: bool = False,
+        model_save_path: Optional[str] = None,  # ✨ MODIFICATION 4: Nouveau paramètre
+        detailed_eval: bool = False
     ) -> ModelConfig:
         """
         Train and evaluate a model configuration.
@@ -356,6 +383,8 @@ class ModelEvaluator:
             epochs: Number of training epochs
             model_name: Unique name for this model
             save_model: Whether to save the trained model
+            model_save_path: Explicit path where to save the model (.keras)
+            detailed_eval: Whether to compute detailed per-class metrics
         
         Returns:
             Updated model_config with performance metrics
@@ -367,7 +396,7 @@ class ModelEvaluator:
             # Build model
             model = build_and_compile_model_03(
                 model_name=model_name,
-                input_shape=ModelDefaults.INPUT_SHAPE,
+                input_shape=self.config.input_shape,
                 output_units=ModelDefaults.OUTPUT_UNITS,
                 conv_layers=model_config.conv_layers,
                 conv_activations=model_config.conv_activations,
@@ -379,10 +408,9 @@ class ModelEvaluator:
                 learning_rate=model_config.learning_rate,
                 loss=ModelDefaults.LOSS,
                 metrics=ModelDefaults.METRICS,
-                save=False  # Don't save to registry yet
+                save=False
             )
-            
-            # Train model
+
             trained_model, history = train_model_pipeline_04(
                 model=model,
                 tfrecord_dir=self.config.tfrecord_dir,
@@ -390,20 +418,38 @@ class ModelEvaluator:
                 epochs=epochs,
                 learning_rate=model_config.learning_rate,
                 early_stopping_patience=self.config.early_stopping_patience,
-                save=save_model,
-                model_save_dir=self.config.models_dir if save_model else None,
-                model_registry_csv=self.config.optimization_log_csv if save_model else None,
+                save=False,  # On sauvegarde manuellement
+                model_registry_csv=None,
                 notes=f"Generation {model_config.generation}",
                 cache_dataset=False,
-                shuffle_buffer_size=1000  # Reduced for memory
+                shuffle_buffer_size=1000
             )
             
-            # Extract metrics
+            # ✨ MODIFICATION 4: Sauvegarder manuellement si demandé
+            if save_model and model_save_path:
+                trained_model.save(model_save_path)
+                log.info(f"Model saved to: {model_save_path}")
+                
+                # Mettre à jour model_config
+                model_config.model_path = model_save_path
+                model_config.model_name = os.path.splitext(os.path.basename(model_save_path))[0]
+            
+            # Extract basic metrics
             model_config.epochs_trained = len(history.history["loss"])
             model_config.val_accuracy = float(max(history.history.get("val_accuracy", [0])))
             model_config.val_loss = float(min(history.history.get("val_loss", [999])))
             model_config.train_accuracy = float(history.history.get("accuracy", [0])[-1])
             model_config.train_loss = float(history.history["loss"][-1])
+            
+            # Detailed evaluation if requested (for final model)
+            if detailed_eval:
+                detailed_metrics = self.compute_detailed_metrics(
+                    trained_model,
+                    model_name
+                )
+                if not hasattr(model_config, 'detailed_metrics'):
+                    model_config.detailed_metrics = {}
+                model_config.detailed_metrics = detailed_metrics
             
             log.info(f"Model {model_name} - Val Acc: {model_config.val_accuracy:.4f}, "
                     f"Val Loss: {model_config.val_loss:.4f}")
@@ -415,13 +461,139 @@ class ModelEvaluator:
             
         except Exception as e:
             log.error(f"Error evaluating model {model_name}: {e}")
-            # Set poor metrics on failure
             model_config.val_accuracy = 0.0
             model_config.val_loss = 999.0
             model_config.train_accuracy = 0.0
             model_config.train_loss = 999.0
         
         return model_config
+    
+    def compute_detailed_metrics(
+        self,
+        model: tf.keras.Model,
+        model_name: str
+    ) -> dict:
+        """Compute detailed per-class metrics on validation set."""
+        log.info(f"Computing detailed metrics for {model_name}...")
+        
+        try:
+            val_dataset = self._load_validation_dataset()
+            
+            y_true = []
+            y_pred = []
+            
+            for batch_x, batch_y in val_dataset:
+                predictions = model.predict(batch_x, verbose=0)
+                y_pred.extend(np.argmax(predictions, axis=1))
+                y_true.extend(np.argmax(batch_y.numpy(), axis=1))
+            
+            y_true = np.array(y_true)
+            y_pred = np.array(y_pred)
+            
+            cm = confusion_matrix(y_true, y_pred)
+            class_names = self._get_class_names()
+            
+            report = classification_report(
+                y_true,
+                y_pred,
+                target_names=class_names,
+                output_dict=True,
+                zero_division=0
+            )
+            
+            per_class_accuracy = {}
+            for i, class_name in enumerate(class_names):
+                mask = y_true == i
+                if mask.sum() > 0:
+                    per_class_accuracy[class_name] = (y_pred[mask] == i).mean()
+                else:
+                    per_class_accuracy[class_name] = 0.0
+            
+            detailed_metrics = {
+                'confusion_matrix': cm.tolist(),
+                'classification_report': report,
+                'per_class_accuracy': per_class_accuracy,
+                'per_class_precision': {
+                    cls: report[cls]['precision'] 
+                    for cls in class_names
+                },
+                'per_class_recall': {
+                    cls: report[cls]['recall'] 
+                    for cls in class_names
+                },
+                'per_class_f1': {
+                    cls: report[cls]['f1-score'] 
+                    for cls in class_names
+                },
+                'macro_avg_precision': report['macro avg']['precision'],
+                'macro_avg_recall': report['macro avg']['recall'],
+                'macro_avg_f1': report['macro avg']['f1-score'],
+                'weighted_avg_precision': report['weighted avg']['precision'],
+                'weighted_avg_recall': report['weighted avg']['recall'],
+                'weighted_avg_f1': report['weighted avg']['f1-score'],
+            }
+            
+            log.info(f"Detailed metrics computed successfully")
+            log.info(f"  Macro avg F1: {detailed_metrics['macro_avg_f1']:.4f}")
+            log.info(f"  Weighted avg F1: {detailed_metrics['weighted_avg_f1']:.4f}")
+            
+            return detailed_metrics
+            
+        except Exception as e:
+            log.error(f"Error computing detailed metrics: {e}")
+            return {}
+    
+    def _load_validation_dataset(self):
+        """Load validation dataset from TFRecords."""
+        val_tfrecord = os.path.join(self.config.tfrecord_dir, "val.tfrecord")
+        
+        dataset = tf.data.TFRecordDataset(val_tfrecord)
+        dataset = dataset.map(self._parse_tfrecord)
+        dataset = dataset.batch(self.config.batch_size)
+        
+        return dataset
+    
+    def _parse_tfrecord(self, example_proto):
+        """Parse TFRecord example."""
+        feature_description = {
+            'audio': tf.io.FixedLenFeature([], tf.string),
+            'label': tf.io.FixedLenFeature([], tf.int64),
+        }
+        
+        parsed = tf.io.parse_single_example(example_proto, feature_description)
+        
+        audio = tf.io.parse_tensor(parsed['audio'], out_type=tf.float32)
+        audio = tf.reshape(audio, self.config.input_shape)
+        
+        label = tf.one_hot(parsed['label'], depth=ModelDefaults.OUTPUT_UNITS)
+        
+        return audio, label
+    
+    def _get_class_names(self) -> list:
+        """Get list of class names."""
+        if hasattr(ModelDefaults, 'CLASS_NAMES'):
+            return ModelDefaults.CLASS_NAMES
+        
+        return ['blues', 'classical', 'country', 'disco', 'hiphop', 
+                'jazz', 'metal', 'pop', 'reggae', 'rock']
+    
+    def _save_detailed_metrics_csv(self, metrics: dict, output_dir: str):
+        """Save per-class metrics to CSV for easy analysis."""
+        csv_path = os.path.join(output_dir, "per_class_metrics.csv")
+        
+        records = []
+        for class_name in sorted(metrics['per_class_accuracy'].keys()):
+            records.append({
+                'class': class_name,
+                'accuracy': metrics['per_class_accuracy'][class_name],
+                'precision': metrics['per_class_precision'][class_name],
+                'recall': metrics['per_class_recall'][class_name],
+                'f1_score': metrics['per_class_f1'][class_name]
+            })
+        
+        df = pd.DataFrame(records)
+        df.to_csv(csv_path, index=False)
+        log.info(f"Per-class metrics saved to {csv_path}")
 
 
 # ============================================================================
@@ -431,17 +603,13 @@ class ModelEvaluator:
 class RandomSearch:
     """Implements random search over hyperparameter space."""
     
-    def __init__(self, config: OptimizationConfig):
+    def __init__(self, config: OptimizationConfig, pipeline: 'OptimizationPipeline'):  # ✨ MODIFICATION 8
         self.config = config
+        self.pipeline = pipeline
         self.evaluator = ModelEvaluator(config)
     
     def run(self) -> List[ModelConfig]:
-        """
-        Run random search to explore hyperparameter space.
-        
-        Returns:
-            List of evaluated model configurations
-        """
+        """Run random search to explore hyperparameter space."""
         log.info("="*80)
         log.info("STARTING RANDOM SEARCH PHASE")
         log.info("="*80)
@@ -453,7 +621,6 @@ class RandomSearch:
         for i in range(self.config.random_search_iterations):
             log.info(f"\n--- Random Search Iteration {i+1}/{self.config.random_search_iterations} ---")
             
-            # Sample random architecture
             arch_dict = HyperparameterSpace.sample_architecture()
             
             model_config = ModelConfig(
@@ -465,20 +632,36 @@ class RandomSearch:
                 dropout_rates=arch_dict['dropout_rates'],
                 learning_rate=arch_dict['learning_rate'],
                 generation=0,
-                model_id=f"random_search_{i:03d}"
+                model_id=f"rd_search_{i:03d}"  # ✨ Convention de nommage
             )
             
-            # Evaluate
+            # ✨ MODIFICATION 3: Définir le chemin de sauvegarde
+            model_save_path = os.path.join(
+                self.pipeline.random_search_models_dir,
+                f"{model_config.model_id}.keras"
+            )
+            
+            # Evaluate et sauvegarder
             model_config = self.evaluator.evaluate_model(
                 model_config,
                 epochs=self.config.partial_training_epochs,
                 model_name=model_config.model_id,
-                save_model=False
+                save_model=True,  # ✨ Sauvegarder
+                model_save_path=model_save_path
             )
             
+            # ✨ MODIFICATION 3: Enregistrer les métadonnées
+            model_config.model_path = model_save_path
+            model_config.timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            model_config.batch_size = self.config.batch_size
+            model_config.dataset_csv_path = self.config.tfrecord_dir
+            model_config.notes = f"Random Search iteration {i+1}"
+            
             results.append(model_config)
+            
+            # ✨ MODIFICATION 8: Enregistrer dans le CSV
+            self.pipeline.append_to_registry(model_config)
         
-        # Sort by validation accuracy
         results.sort(key=lambda x: x.val_accuracy, reverse=True)
         
         log.info("\n" + "="*80)
@@ -497,9 +680,11 @@ class RandomSearch:
 class NeuroEvolution:
     """Implements neuroevolution with mutation-based architecture search."""
     
-    def __init__(self, config: OptimizationConfig, baseline_config: ModelConfig):
+    def __init__(self, config: OptimizationConfig, baseline_config: ModelConfig, 
+                 pipeline: 'OptimizationPipeline'):  # ✨ MODIFICATION 8
         self.config = config
         self.baseline_config = baseline_config
+        self.pipeline = pipeline
         self.evaluator = ModelEvaluator(config)
         self.generation_history = []
     
@@ -509,13 +694,11 @@ class NeuroEvolution:
         
         population = []
         
-        # Add baseline
         baseline = copy.deepcopy(self.baseline_config)
         baseline.generation = 1
         baseline.model_id = "gen1_model_000_baseline"
         population.append(baseline)
         
-        # Generate mutated variants
         for i in range(1, self.config.population_size):
             mutated = MutationOperators.mutate(
                 copy.deepcopy(self.baseline_config),
@@ -530,10 +713,8 @@ class NeuroEvolution:
     
     def select_survivors(self, population: List[ModelConfig]) -> List[ModelConfig]:
         """Select top performers for next generation."""
-        # Sort by validation accuracy
         population.sort(key=lambda x: x.val_accuracy, reverse=True)
         
-        # Select top models
         n_survivors = max(1, int(len(population) * self.config.selection_ratio))
         survivors = population[:n_survivors]
         
@@ -551,19 +732,15 @@ class NeuroEvolution:
         """Create new generation through mutation."""
         offspring = []
         
-        # Keep best parent unchanged (elitism)
         best_parent = copy.deepcopy(parents[0])
         best_parent.generation = generation
         best_parent.model_id = f"gen{generation}_model_000_elite"
         offspring.append(best_parent)
         
-        # Create mutated offspring
         offspring_count = 1
         while len(offspring) < self.config.population_size:
-            # Select random parent
             parent = random.choice(parents)
             
-            # Mutate
             child = MutationOperators.mutate(
                 copy.deepcopy(parent),
                 self.config.mutation_rate
@@ -593,17 +770,33 @@ class NeuroEvolution:
         for i, model_config in enumerate(population):
             log.info(f"\n--- Model {i+1}/{len(population)} ---")
             
-            # Evaluate
+            # ✨ MODIFICATION 5: Définir le chemin de sauvegarde
+            model_save_path = os.path.join(
+                self.pipeline.neuroevolution_models_dir,
+                f"{model_config.model_id}.keras"
+            )
+            
+            # Evaluate et sauvegarder
             evaluated = self.evaluator.evaluate_model(
                 model_config,
                 epochs=self.config.partial_training_epochs,
                 model_name=model_config.model_id,
-                save_model=False
+                save_model=True,  # ✨ Sauvegarder
+                model_save_path=model_save_path
             )
             
+            # ✨ MODIFICATION 5: Enregistrer les métadonnées
+            evaluated.model_path = model_save_path
+            evaluated.timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            evaluated.batch_size = self.config.batch_size
+            evaluated.dataset_csv_path = self.config.tfrecord_dir
+            evaluated.notes = f"Generation {generation}, model {i+1}/{len(population)}"
+            
             results.append(evaluated)
+            
+            # ✨ MODIFICATION 8: Enregistrer dans le CSV
+            self.pipeline.append_to_registry(evaluated)
         
-        # Log generation summary
         results.sort(key=lambda x: x.val_accuracy, reverse=True)
         avg_val_acc = np.mean([r.val_accuracy for r in results])
         
@@ -622,12 +815,7 @@ class NeuroEvolution:
         return results
     
     def run(self) -> ModelConfig:
-        """
-        Run complete neuroevolution process.
-        
-        Returns:
-            Best model configuration found
-        """
+        """Run complete neuroevolution process."""
         log.info("="*80)
         log.info("STARTING NEUROEVOLUTION PHASE")
         log.info("="*80)
@@ -635,25 +823,19 @@ class NeuroEvolution:
         log.info(f"Population size: {self.config.population_size}")
         log.info(f"Mutation rate: {self.config.mutation_rate}")
         
-        # Initialize population
         population = self.initialize_population()
         
         all_models = []
         
-        # Evolution loop
         for gen in range(1, self.config.num_generations + 1):
-            # Evaluate population
             evaluated_population = self.run_generation(population, gen)
             all_models.extend(evaluated_population)
             
-            # Select survivors
             survivors = self.select_survivors(evaluated_population)
             
-            # Create next generation (unless last generation)
             if gen < self.config.num_generations:
                 population = self.create_offspring(survivors, gen + 1)
         
-        # Find best overall model
         all_models.sort(key=lambda x: x.val_accuracy, reverse=True)
         best_model = all_models[0]
         
@@ -681,10 +863,69 @@ class OptimizationPipeline:
     
     def setup_directories(self):
         """Create output directories."""
+        # ✨ MODIFICATION 2: Structure détaillée
         os.makedirs(self.config.output_dir, exist_ok=True)
-        os.makedirs(self.config.models_dir, exist_ok=True)
-        os.makedirs(self.config.logs_dir, exist_ok=True)
+        
+        self.random_search_models_dir = os.path.join(self.config.models_dir, "random_search_models")
+        self.neuroevolution_models_dir = os.path.join(self.config.models_dir, "neuro_evolution_models")
+        self.exec_report_dir = os.path.join(self.config.output_dir, "exec_report")
+        
+        os.makedirs(self.random_search_models_dir, exist_ok=True)
+        os.makedirs(self.neuroevolution_models_dir, exist_ok=True)
+        os.makedirs(self.exec_report_dir, exist_ok=True)
+        
         log.info(f"Output directory: {self.config.output_dir}")
+        log.info(f"Random Search models: {self.random_search_models_dir}")
+        log.info(f"Neuroevolution models: {self.neuroevolution_models_dir}")
+    
+    def append_to_registry(self, model_config: ModelConfig):
+        """
+        ✨ MODIFICATION 7: Ajouter un modèle au CSV de manière incrémentale.
+        Évite les doublons et garantit la cohérence.
+        """
+        registry_path = os.path.join(self.config.output_dir, "models_perf.csv")
+        
+        record = {
+            'model_id': model_config.model_id,
+            'generation': model_config.generation,
+            'parent_id': model_config.parent_id if model_config.parent_id else '',
+            'val_accuracy': model_config.val_accuracy,
+            'val_loss': model_config.val_loss,
+            'train_accuracy': model_config.train_accuracy,
+            'train_loss': model_config.train_loss,
+            'test_accuracy': model_config.test_accuracy if model_config.test_accuracy else '',
+            'test_loss': model_config.test_loss if model_config.test_loss else '',
+            'epochs_trained': model_config.epochs_trained,
+            'model_name': model_config.model_name if model_config.model_name else '',
+            'model_path': model_config.model_path if model_config.model_path else '',
+            'timestamp': model_config.timestamp if model_config.timestamp else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'dataset_csv_path': model_config.dataset_csv_path if model_config.dataset_csv_path else self.config.tfrecord_dir,
+            'batch_size': model_config.batch_size if model_config.batch_size else self.config.batch_size,
+            'framework': model_config.framework,
+            'notes': model_config.notes if model_config.notes else '',
+            'learning_rate': model_config.learning_rate,
+            'architecture': model_config.get_architecture_string(),
+            'conv_layers': str(model_config.conv_layers),
+            'conv_activations': str(model_config.conv_activations),
+            'pool_size': str(model_config.pool_size),
+            'dense_layers': str(model_config.dense_layers),
+            'dense_activations': str(model_config.dense_activations),
+            'dropout_rates': str(model_config.dropout_rates),
+        }
+        
+        df_new = pd.DataFrame([record])
+        
+        if os.path.exists(registry_path):
+            df_existing = pd.read_csv(registry_path)
+            if model_config.model_id in df_existing['model_id'].values:
+                log.warning(f"Model {model_config.model_id} already in registry, skipping")
+                return
+            
+            df_new.to_csv(registry_path, mode='a', header=False, index=False)
+        else:
+            df_new.to_csv(registry_path, mode='w', header=True, index=False)
+        
+        log.info(f"Registered model {model_config.model_id} in {registry_path}")
     
     def create_baseline_config(self) -> ModelConfig:
         """Create baseline model configuration."""
@@ -700,24 +941,6 @@ class OptimizationPipeline:
             model_id="baseline"
         )
     
-    def save_all_models_log(self):
-        """Save comprehensive log of all evaluated models."""
-        if not self.all_models:
-            return
-        
-        records = []
-        for model in self.all_models:
-            record = model.to_dict()
-            # Convert lists to strings for CSV
-            record['conv_layers_str'] = str(model.conv_layers)
-            record['dense_layers_str'] = str(model.dense_layers)
-            record['architecture'] = model.get_architecture_string()
-            records.append(record)
-        
-        df = pd.DataFrame(records)
-        df.to_csv(self.config.optimization_log_csv, index=False)
-        log.info(f"Saved optimization log to {self.config.optimization_log_csv}")
-    
     def train_best_model_fully(self, best_config: ModelConfig) -> Tuple[tf.keras.Model, ModelConfig]:
         """Train the best model with full epochs."""
         log.info("="*80)
@@ -726,11 +949,13 @@ class OptimizationPipeline:
         log.info(f"Model: {best_config.model_id}")
         log.info(f"Architecture: {best_config.get_architecture_string()}")
         
-        # Build model
-        model_name = f"best_model_final_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # ✨ MODIFICATION 6: Définir le chemin de sauvegarde du modèle final
+        model_name = "final_model"
+        final_model_path = os.path.join(self.config.models_dir, f"{model_name}.keras")
+        
         model = build_and_compile_model_03(
             model_name=model_name,
-            input_shape=ModelDefaults.INPUT_SHAPE,
+            input_shape=self.config.input_shape,
             output_units=ModelDefaults.OUTPUT_UNITS,
             conv_layers=best_config.conv_layers,
             conv_activations=best_config.conv_activations,
@@ -753,12 +978,13 @@ class OptimizationPipeline:
             epochs=self.config.full_training_epochs,
             learning_rate=best_config.learning_rate,
             early_stopping_patience=self.config.early_stopping_patience,
-            save=True,
-            model_save_dir=self.config.models_dir,
-            model_registry_csv=self.config.optimization_log_csv,
-            notes=f"Best model from optimization - {best_config.model_id}",
+            save=False,  # ✨ On sauvegarde manuellement après
             cache_dataset=False
         )
+        
+        # ✨ MODIFICATION 6: Sauvegarder manuellement avec le bon nom
+        trained_model.save(final_model_path)
+        log.info(f"Final model saved to: {final_model_path}")
         
         # Update config with final metrics
         best_config.epochs_trained = len(history.history["loss"])
@@ -766,6 +992,14 @@ class OptimizationPipeline:
         best_config.val_loss = float(min(history.history.get("val_loss", [999])))
         best_config.train_accuracy = float(history.history.get("accuracy", [0])[-1])
         best_config.train_loss = float(history.history["loss"][-1])
+        
+        # ✨ MODIFICATION 6: Enregistrer les métadonnées du modèle final
+        best_config.model_path = final_model_path
+        best_config.model_name = model_name
+        best_config.timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        best_config.batch_size = self.config.batch_size
+        best_config.dataset_csv_path = self.config.tfrecord_dir
+        best_config.notes = f"Final model - fully trained from {best_config.model_id}"
         
         log.info(f"Final training - Val Acc: {best_config.val_accuracy:.4f}")
         
@@ -792,8 +1026,11 @@ class OptimizationPipeline:
         return test_results
     
     def generate_final_report(self, best_config: ModelConfig, test_results: dict):
-        """Generate comprehensive final report."""
-        report_path = os.path.join(self.config.output_dir, "final_report.txt")
+        """
+        Generate comprehensive final report.
+        ✨ MODIFICATION 9: Déplacer vers exec_report/
+        """
+        report_path = os.path.join(self.exec_report_dir, "optimization_summary.txt")
         
         with open(report_path, 'w') as f:
             f.write("="*80 + "\n")
@@ -814,6 +1051,7 @@ class OptimizationPipeline:
             f.write("BEST MODEL\n")
             f.write("-" * 40 + "\n")
             f.write(f"Model ID: {best_config.model_id}\n")
+            f.write(f"Model Path: {best_config.model_path}\n")
             f.write(f"Generation: {best_config.generation}\n")
             f.write(f"Parent ID: {best_config.parent_id}\n\n")
             
@@ -846,6 +1084,38 @@ class OptimizationPipeline:
             f.write(f"Test loss: {best_config.test_loss:.4f}\n")
             f.write(f"Epochs trained: {best_config.epochs_trained}\n\n")
             
+            # Add detailed metrics if available
+            if hasattr(best_config, 'detailed_metrics') and best_config.detailed_metrics:
+                metrics = best_config.detailed_metrics
+                
+                f.write("DETAILED PERFORMANCE METRICS\n")
+                f.write("-" * 40 + "\n\n")
+                
+                f.write("Macro Averages:\n")
+                f.write(f"  Precision: {metrics['macro_avg_precision']:.4f}\n")
+                f.write(f"  Recall: {metrics['macro_avg_recall']:.4f}\n")
+                f.write(f"  F1-Score: {metrics['macro_avg_f1']:.4f}\n\n")
+                
+                f.write("Weighted Averages:\n")
+                f.write(f"  Precision: {metrics['weighted_avg_precision']:.4f}\n")
+                f.write(f"  Recall: {metrics['weighted_avg_recall']:.4f}\n")
+                f.write(f"  F1-Score: {metrics['weighted_avg_f1']:.4f}\n\n")
+                
+                f.write("PER-CLASS PERFORMANCE\n")
+                f.write("-" * 40 + "\n")
+                f.write(f"{'Class':<15} {'Accuracy':<10} {'Precision':<10} {'Recall':<10} {'F1-Score':<10}\n")
+                f.write("-" * 60 + "\n")
+                
+                for class_name in sorted(metrics['per_class_accuracy'].keys()):
+                    acc = metrics['per_class_accuracy'][class_name]
+                    prec = metrics['per_class_precision'][class_name]
+                    rec = metrics['per_class_recall'][class_name]
+                    f1 = metrics['per_class_f1'][class_name]
+                    
+                    f.write(f"{class_name:<15} {acc:<10.4f} {prec:<10.4f} {rec:<10.4f} {f1:<10.4f}\n")
+                
+                f.write("\n")
+            
             f.write("TOTAL MODELS EVALUATED\n")
             f.write("-" * 40 + "\n")
             f.write(f"Random search: {self.config.random_search_iterations}\n")
@@ -855,6 +1125,11 @@ class OptimizationPipeline:
             f.write("="*80 + "\n")
         
         log.info(f"Final report saved to {report_path}")
+        
+        # Save detailed metrics if available
+        if hasattr(best_config, 'detailed_metrics') and best_config.detailed_metrics:
+            evaluator = ModelEvaluator(self.config)
+            evaluator._save_detailed_metrics_csv(best_config.detailed_metrics, self.exec_report_dir)
     
     def run(self):
         """Run the complete optimization pipeline."""
@@ -865,32 +1140,45 @@ class OptimizationPipeline:
         log.info("="*80)
         log.info(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         
-        # Set random seeds
         random.seed(self.config.random_seed)
         np.random.seed(self.config.random_seed)
         tf.random.set_seed(self.config.random_seed)
         
         # Phase 1: Random Search
-        random_search = RandomSearch(self.config)
+        # ✨ MODIFICATION 8: Passer self à RandomSearch
+        random_search = RandomSearch(self.config, pipeline=self)
         random_results = random_search.run()
         self.all_models.extend(random_results)
         
-        # Use best from random search as baseline for evolution
         best_random = random_results[0]
         
         # Phase 2: NeuroEvolution
-        neuroevolution = NeuroEvolution(self.config, best_random)
+        # ✨ MODIFICATION 8: Passer self à NeuroEvolution
+        neuroevolution = NeuroEvolution(self.config, best_random, pipeline=self)
         best_evolved = neuroevolution.run()
-        self.all_models.extend([best_evolved])  # Already included in generation results
+        self.all_models.extend([best_evolved])
         
-        # Save all models log
-        self.save_all_models_log()
+        # ✨ MODIFICATION 10: Ne plus appeler save_all_models_log (obsolète)
+        # Les modèles sont déjà enregistrés au fur et à mesure via append_to_registry
         
         # Phase 3: Full training of best model
         best_model, best_config = self.train_best_model_fully(best_evolved)
         
+        # Enregistrer le modèle final dans le registry
+        self.append_to_registry(best_config)
+        
         # Phase 4: Test evaluation
         test_results = self.evaluate_on_test(best_model, best_config)
+        
+        # Mettre à jour le registry avec les résultats de test
+        # (Re-enregistrer avec les nouvelles métriques)
+        registry_path = os.path.join(self.config.output_dir, "models_perf.csv")
+        if os.path.exists(registry_path):
+            df = pd.read_csv(registry_path)
+            mask = df['model_id'] == best_config.model_id
+            df.loc[mask, 'test_accuracy'] = best_config.test_accuracy
+            df.loc[mask, 'test_loss'] = best_config.test_loss
+            df.to_csv(registry_path, index=False)
         
         # Phase 5: Generate report
         self.generate_final_report(best_config, test_results)
@@ -905,6 +1193,7 @@ class OptimizationPipeline:
         log.info(f"Total duration: {duration}")
         log.info(f"Best model test accuracy: {best_config.test_accuracy:.4f}")
         log.info(f"Output directory: {self.config.output_dir}")
+        log.info(f"Models performance CSV: {os.path.join(self.config.output_dir, 'models_perf.csv')}")
         log.info("="*80 + "\n")
 
 
@@ -915,34 +1204,21 @@ class OptimizationPipeline:
 def main():
     """Main entry point for the optimization pipeline."""
     
-    # Create configuration
     config = OptimizationConfig(
-        # Data paths
-        tfrecord_dir="data/tfrecords",  # Adjust to your data path
-        
-        # Resource constraints
+        tfrecord_dir="data/tfrecords",
         batch_size=32,
         partial_training_epochs=10,
         full_training_epochs=50,
         early_stopping_patience=5,
-        
-        # Random search
         random_search_iterations=10,
-        
-        # Neuroevolution
         population_size=8,
         num_generations=5,
         mutation_rate=0.3,
         selection_ratio=0.5,
-        
-        # Output
         output_dir="optimization_results",
-        
-        # Seed
         random_seed=42
     )
     
-    # Create and run pipeline
     pipeline = OptimizationPipeline(config)
     pipeline.run()
 

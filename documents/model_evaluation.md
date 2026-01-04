@@ -1,50 +1,60 @@
 
+## 2.2 Global Metrics
 
-## 2.2 Métriques globales
-| Nom	| Var| 	Rôle| 
-| ---- | ---- | ---- | 
-| Accuracy| 	acc| 	Performance brute| 
-| Macro F1| 	f1_macro| 	Équité inter-classes| 
-| Weighted F1| 	f1_weighted| Robustesse| 
-| Loss validation| 	loss_val| 	Stabilité| 
-| Overfitting gap	| gap| 	Généralisation| 
-	​
+| Name            | Var         | Role                 |
+| --------------- | ----------- | -------------------- |
+| Accuracy        | acc         | Raw performance      |
+| Macro F1        | f1_macro    | Inter-class fairness |
+| Weighted F1     | f1_weighted | Robustness           |
+| Validation loss | loss_val    | Stability            |
+| Overfitting gap | gap         | Generalization       |
 
-## 2.3 Métriques dynamiques (essentielles pour GA)
+---
 
-Ces métriques permettent d’évaluer un modèle partiellement entraîné.
+## 2.3 Dynamic metrics (critical for GA)
 
-| Nom | 	Description | 
-| ---- | ---- | 
-| epochs_trained | 	Nombre d’epochs effectifs | 
-| best_epoch	 | Epoch du meilleur val | 
-| convergence_speed | 	Epoch où val_loss minimale | 
-| divergence_flag	 | Explosion loss / NaN | 
-| learning_slope	 | Dérivée loss sur premiers epochs | 
+These metrics allow evaluating a model that is only partially trained.
+
+| Name              | Description                                 |
+| ----------------- | ------------------------------------------- |
+| epochs_trained    | Number of effective epochs                  |
+| best_epoch        | Epoch with best validation result           |
+| convergence_speed | Epoch where validation loss reaches minimum |
+| divergence_flag   | Loss explosion / NaN                        |
+| learning_slope    | Loss derivative over the first epochs       |
+
+---
 
 ## Fitness Value
-Definition d'un alpha, beta, gamma, sigma :
 
-**fiteness = alpha⋅f1macro​−beta⋅gap−gamma⋅lossval​−sigma⋅complexity**
+Definition of α, β, γ, σ:
 
--Favorise la stabilité 
--Pénalise la complexité, et le sur-apprentissage
+**fitness = α·f1_macro − β·gap − γ·loss_val − σ·complexity**
 
-## Stockage des données dans un CSV avec ces informations précises 
+* Favors stability
+* Penalizes complexity and overfitting
+
+---
+
+## Storing results in a CSV with precise fields
+
+```
 model_id,generation,fitness,f1_macro,accuracy,loss_val,loss_train,gap,epochs_trained,num_params,train_time_sec,status
+```
 
-| Nom du champ     | Type informatique | Description                                                                                                                       |
-| ---------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `model_id`       | `str`             | Identifiant unique du modèle évalué. Permet de relier les résultats à une architecture, une configuration ou un génome précis.    |
-| `generation`     | `int`             | Numéro de génération dans l’algorithme d’optimisation (ex: algorithme génétique). Permet d’analyser la progression dans le temps. |
-| `fitness`        | `float`           | Score global utilisé pour la sélection des modèles. Combinaison pondérée de métriques (F1, overfitting, complexité, etc.).        |
-| `f1_macro`       | `float`           | F1-score macro-averaged sur le jeu de validation. Mesure l’équilibre des performances entre les classes.                          |
-| `accuracy`       | `float`           | Accuracy globale sur le jeu de validation. Indique la proportion de prédictions correctes.                                        |
-| `loss_val`       | `float`           | Valeur minimale de la fonction de perte sur le jeu de validation. Indicateur de généralisation.                                   |
-| `loss_train`     | `float`           | Valeur minimale de la fonction de perte sur le jeu d’entraînement. Sert à détecter l’overfitting.                                 |
-| `gap`            | `float`           | Différence `loss_val - loss_train`. Mesure directe du surapprentissage du modèle.                                                 |
-| `epochs_trained` | `int`             | Nombre réel d’epochs effectués avant arrêt (early stopping inclus). Indicateur de vitesse de convergence.                         |
-| `num_params`     | `int`             | Nombre total de paramètres entraînables du modèle. Sert à pénaliser les modèles trop complexes.                                   |
-| `train_time_sec` | `float`           | Temps total d’entraînement en secondes pour ce modèle. Permet d’intégrer le coût de calcul.                                       |
-| `status`         | `str`             | État final de l’évaluation (`OK`, `FAILED`, `DIVERGED`). Permet de filtrer les modèles invalides.                                 |
+| Field name       | Type    | Description                                                                                                        |
+| ---------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `model_id`       | `str`   | Unique identifier of the evaluated model. Links results to a specific architecture, configuration, or genome.      |
+| `generation`     | `int`   | Generation index in the optimization algorithm (e.g., genetic algorithm). Useful for analyzing progress over time. |
+| `fitness`        | `float` | Global score used for model selection. Weighted combination of metrics (F1, overfitting, complexity, etc.).        |
+| `f1_macro`       | `float` | Macro-averaged F1 score on the validation set. Measures balance between classes.                                   |
+| `accuracy`       | `float` | Global accuracy on the validation set. Indicates the proportion of correct predictions.                            |
+| `loss_val`       | `float` | Minimum validation loss. Indicator of generalization ability.                                                      |
+| `loss_train`     | `float` | Minimum training loss. Used to detect overfitting.                                                                 |
+| `gap`            | `float` | Difference `loss_val - loss_train`. Direct measure of model overfitting.                                           |
+| `epochs_trained` | `int`   | Actual number of epochs completed (including early stopping). Indicator of convergence speed.                      |
+| `num_params`     | `int`   | Total number of trainable parameters. Used to penalize overly complex models.                                      |
+| `train_time_sec` | `float` | Total training time in seconds. Allows incorporating computation cost.                                             |
+| `status`         | `str`   | Final evaluation status (`OK`, `FAILED`, `DIVERGED`). Helps filter invalid models.                                 |
+
 

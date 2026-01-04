@@ -1,9 +1,11 @@
+Here is the research space definined for Random search and neuroevolutiv optimization.
 
+```py
 search_space = {
-    'num_conv_layers': (2, 5),                # discrete
-    'filters_per_layer': [16, 32, 64, 128],   # discrete choices
-    'kernel_size': [3, 5],                     # discrete choices
-    'pool_size': [2, 3],                       # discrete choices
+    'num_conv_layers': (2, 5),                #discrete
+    'filters_per_layer': [16, 32, 64, 128],   #discrete choices
+    'kernel_size': [3, 5],                    # discrete choices
+    'pool_size': [2, 3],                      # discrete choices
     'dropout_rate': (0.0, 0.5),               # continuous
     'dense_units': (64, 512),                 # discrete
     'dense_dropout': (0.0, 0.5),              # continuous
@@ -14,4 +16,4 @@ search_space = {
     'n_mels': [40, 64, 80, 128],              # discrete choices
     'n_fft': [512, 1024, 2048],               # discrete choices
     'hop_length': [128, 256, 512],            # discrete choices
-}
+}```
