@@ -579,7 +579,7 @@ def predict_genre_batch(
 
 if __name__ == "__main__":
     # Example usage (requires a trained model and appropriate files)
-    model_path = r"optimization_results/models/functional_2025-12-27_19-29-39.keras"
+    model_path = r"optimization_results/models/final_model.keras"
     normalization_stats_path = r"data/tfrecords_64/normalization_stats.json"
     label_mapping_path = r"data/metadata/label_mapping.csv"
     audio_files_list = [
@@ -598,7 +598,7 @@ if __name__ == "__main__":
         normalization_stats_path=normalization_stats_path,
         label_mapping_path=label_mapping_path,
         audio_paths=audio_files_list,
-        output_dir="predictions",
+        output_dir=r"data/predictions",
         segment_duration=3.0,
         overlap=0.5,
         aggregation_method="soft_voting"
