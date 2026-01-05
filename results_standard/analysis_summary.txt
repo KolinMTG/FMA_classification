@@ -1,0 +1,22 @@
+OPTIMIZATION RESULTS ANALYSIS
+==================================================
+
+Total models evaluated: 19
+Best validation accuracy: 0.5646
+Average validation accuracy: 0.4557
+Std validation accuracy: 0.2036
+
+Top 5 Models:
+               model_id  generation  val_accuracy                               architecture                                                                       model_path
+         gen1_model_003           1      0.564604 C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64-D512          optimization_results/models\neuro_evolution_models\gen1_model_003.keras
+         gen2_model_002           2      0.560014      C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64          optimization_results/models\neuro_evolution_models\gen2_model_002.keras
+gen1_model_000_baseline           1      0.557974      C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64 optimization_results/models\neuro_evolution_models\gen1_model_000_baseline.keras
+          rd_search_001           0      0.555593      C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64             optimization_results/models\random_search_models\rd_search_001.keras
+         gen1_model_001           1      0.554063      C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64          optimization_results/models\neuro_evolution_models\gen1_model_001.keras
+
+Models by Generation:
+generation
+0    7
+1    4
+2    4
+3    4

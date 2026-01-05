@@ -128,7 +128,7 @@ def main_pipeline() -> None:
 
     #! 05 Optimize model architecture and hyperparameters with optimization pipeline
     # example_2_standard_run()
-    example_0_pipeline_test(tfrecord_dir=TFRECORD_OUTPUT_DIR_64)
+    example_2_standard_run(tfrecord_dir=TFRECORD_OUTPUT_DIR_64)
     analyze_results()
 
 

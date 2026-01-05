@@ -1,0 +1,56 @@
+================================================================================
+MODEL OPTIMIZATION PIPELINE - FINAL REPORT
+================================================================================
+
+Date: 2026-01-05 06:45:36
+
+CONFIGURATION
+----------------------------------------
+Population size: 4
+Generations: 3
+Random search iterations: 7
+Partial training epochs: 7
+Full training epochs: 30
+Batch size: 32
+
+BEST MODEL
+----------------------------------------
+Model ID: gen1_model_003
+Model Path: optimization_results/models\final_model.keras
+Generation: 1
+Parent ID: baseline
+
+ARCHITECTURE
+----------------------------------------
+Architecture string: C32k(7, 7)-C128k(5, 5)-C64k(3, 3)_D64-D512
+
+Convolutional layers:
+  Layer 1: 32 filters, kernel (7, 7), activation 'relu', dropout 0.0
+  Layer 2: 128 filters, kernel (5, 5), activation 'elu', dropout 0.2
+  Layer 3: 64 filters, kernel (3, 3), activation 'relu', dropout 0.2
+
+Pooling size: (3, 3)
+
+Dense layers:
+  Layer 1: 64 neurons, activation 'elu'
+  Layer 2: 512 neurons, activation 'elu'
+
+Learning rate: 0.00034923388654376874
+
+PERFORMANCE METRICS
+----------------------------------------
+Training accuracy: 0.6963
+Training loss: 0.8326
+Validation accuracy: 0.5558
+Validation loss: 1.2741
+Test accuracy: 0.5442
+Test loss: 1.2490
+Epochs trained: 5
+
+TOTAL MODELS EVALUATED
+----------------------------------------
+Random search: 7
+Neuroevolution: 12
+Total: 8
+
+================================================================================

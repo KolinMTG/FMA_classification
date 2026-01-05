@@ -147,15 +147,15 @@ def example_2_standard_run(tfrecord_dir=TFRECORD_OUTPUT_DIR_64):
         
         # Standard training
         batch_size=32,
-        partial_training_epochs=10,
-        full_training_epochs=50,
-        early_stopping_patience=5,
+        partial_training_epochs=7,
+        full_training_epochs=30,
+        early_stopping_patience=3,
         
         # Moderate search
-        random_search_iterations=10,
-        population_size=8,
-        num_generations=5,
-        mutation_rate=0.3,
+        random_search_iterations=7,
+        population_size=4,
+        num_generations=3,
+        mutation_rate=0.35,
         
         # Output
         output_dir="results_standard",
