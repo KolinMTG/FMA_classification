@@ -1,0 +1,82 @@
+================================================================================
+MODEL PERFORMANCE ANALYSIS REPORT
+================================================================================
+
+Analysis Date: 2026-01-06 22:04:38
+Dataset: predictions/test_tfrecords/.predictions_with_true_labels.csv
+
+--------------------------------------------------------------------------------
+DATASET OVERVIEW
+--------------------------------------------------------------------------------
+Total Files: 450
+Successful Predictions: 450
+Failed Predictions: 0
+Success Rate: 100.00%
+Number of Classes: 6
+Classes: Electronic, Experimental, Folk, Hip-Hop, Pop, Rock
+
+--------------------------------------------------------------------------------
+OVERALL PERFORMANCE METRICS
+--------------------------------------------------------------------------------
+Accuracy: 0.5689 (56.89%)
+Precision (Macro): 0.5742
+Precision (Micro): 0.5689
+Recall (Macro): 0.5689
+Recall (Micro): 0.5689
+F1-Score (Macro): 0.5538
+F1-Score (Micro): 0.5689
+
+--------------------------------------------------------------------------------
+PER-CLASS PERFORMANCE
+--------------------------------------------------------------------------------
+Class                Precision    Recall       F1-Score     Support   
+--------------------------------------------------------------------------------
+Electronic           0.5065       0.5200       0.5132       75        
+Experimental         0.4416       0.4533       0.4474       75        
+Folk                 0.5043       0.7867       0.6146       75        
+Hip-Hop              0.7013       0.7200       0.7105       75        
+Pop                  0.5517       0.2133       0.3077       75        
+Rock                 0.7397       0.7200       0.7297       75        
+
+--------------------------------------------------------------------------------
+CONFIDENCE STATISTICS
+--------------------------------------------------------------------------------
+Overall Mean Confidence: 0.5449
+Overall Median Confidence: 0.5160
+Overall Std Confidence: 0.1887
+
+Correct Predictions - Mean Confidence: 0.6135
+Incorrect Predictions - Mean Confidence: 0.4543
+
+--------------------------------------------------------------------------------
+ERROR ANALYSIS
+--------------------------------------------------------------------------------
+Total Misclassified: 194
+Error Rate: 43.11%
+
+Top 10 Confusion Patterns:
+  Pop → Folk: 33 files
+  Experimental → Electronic: 16 files
+  Hip-Hop → Electronic: 13 files
+  Electronic → Hip-Hop: 12 files
+  Pop → Experimental: 11 files
+  Folk → Experimental: 10 files
+  Electronic → Experimental: 9 files
+  Rock → Experimental: 9 files
+  Rock → Folk: 9 files
+  Experimental → Folk: 8 files
+
+--------------------------------------------------------------------------------
+SEGMENT ANALYSIS
+--------------------------------------------------------------------------------
+Mean Number of Segments: 13.43
+Median Number of Segments: 13
+Min/Max Segments: 13 / 14
+
+Mean Segment Consistency: 0.1667
+Segment Consistency (Correct): 0.1667
+Segment Consistency (Incorrect): 0.1667
+
+================================================================================
+END OF REPORT
+================================================================================

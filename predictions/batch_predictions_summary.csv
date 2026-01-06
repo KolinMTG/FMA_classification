@@ -1,5 +1,0 @@
-audio_path,audio_filename,predicted_label,confidence,num_segments,report_path
-data/FMA_medium/fma_medium/000/000002.mp3,000002.mp3,Electronic,0.38168826699256897,18,predictions\000002_report.txt
-data/FMA_medium/fma_medium/000/000003.mp3,000003.mp3,Hip-Hop,0.36977043747901917,19,predictions\000003_report.txt
-data/FMA_medium/fma_medium/000/000004.mp3,000004.mp3,ERROR,0.0,0,N/A
-data/FMA_medium/fma_medium/000/000005.mp3,000005.mp3,Hip-Hop,0.26715508103370667,19,predictions\000005_report.txt
