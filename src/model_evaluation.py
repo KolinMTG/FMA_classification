@@ -1,3 +1,7 @@
+"""
+Module for evaluating trained models and logging results to CSV.
+"""
+
 from typing import Dict
 import pandas as pd
 import numpy as np
@@ -14,7 +18,7 @@ def evaluate_and_log_model(
     dataset: tf.data.Dataset,
     training_metadata: Dict,
     model_metadata: Dict,
-    eval_csv_path: str
+    eval_csv_path: str,
 ) -> None:
     """
     Evaluate a trained model, compute metrics and append results to CSV.
@@ -65,7 +69,7 @@ def evaluate_and_log_model(
         "epochs_trained": training_metadata["epochs_trained"],
         "num_params": model_metadata["num_params"],
         "train_time_sec": training_metadata["training_time_sec"],
-        "status": "OK"
+        "status": "OK",
     }
 
     eval_csv = Path(eval_csv_path)

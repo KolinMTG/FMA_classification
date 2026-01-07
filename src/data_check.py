@@ -1,3 +1,5 @@
+"""Module for checking and visualizing data quality and distribution in TFRecord datasets."""
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -11,6 +13,7 @@ from src.cste import *
 from src.logger import get_logger
 
 log = get_logger("model_training")
+
 
 def parse_tfrecord(example_proto: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """
@@ -49,6 +52,7 @@ def parse_tfrecord(example_proto: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
 
     return spectrogram, label
 
+
 def _collect_split_stats(tfrecord_paths, max_records=None):
     spectro_means = []
     labels = []
@@ -68,7 +72,6 @@ def _collect_split_stats(tfrecord_paths, max_records=None):
             labels.append(label.numpy())
 
     return np.array(spectro_means), np.array(labels)
-
 
 
 def check_normalisation(csv_split_path: str, random_samples: int = 5):
@@ -111,9 +114,7 @@ def check_normalisation(csv_split_path: str, random_samples: int = 5):
         split_df = df[df["split"] == split_id]
         paths = split_df["path"].tolist()
 
-        spectro_means, _ = _collect_split_stats(
-            paths, max_records=random_samples
-        )
+        spectro_means, _ = _collect_split_stats(paths, max_records=random_samples)
 
         print(
             f"{split_name} random sample mean={spectro_means.mean():.5f}, "
@@ -138,10 +139,11 @@ def plot_frequency_distribution(spectrogram: np.ndarray, ax=None, save: str = No
         ax.set_xlabel("Frequency Bin")
         ax.set_ylabel("Amplitude")
 
+
 def plot_local_structure(spectrogram: np.ndarray, ax=None, save: str = None):
     if ax is None:
         plt.figure()
-        plt.imshow(spectrogram[:, :, 0], aspect='auto', origin='lower')
+        plt.imshow(spectrogram[:, :, 0], aspect="auto", origin="lower")
         plt.title("Local Structure")
         plt.xlabel("Time")
         plt.ylabel("Frequency")
@@ -150,10 +152,11 @@ def plot_local_structure(spectrogram: np.ndarray, ax=None, save: str = None):
             plt.savefig(save + "_local_structure.png")
         plt.show()
     else:
-        ax.imshow(spectrogram[:, :, 0], aspect='auto', origin='lower')
+        ax.imshow(spectrogram[:, :, 0], aspect="auto", origin="lower")
         ax.set_title("Local Structure")
         ax.set_xlabel("Time")
         ax.set_ylabel("Frequency")
+
 
 def plot_temporal_dynamics(spectrogram: np.ndarray, ax=None, save: str = None):
     time_mean = np.mean(spectrogram, axis=0)
@@ -173,14 +176,18 @@ def plot_temporal_dynamics(spectrogram: np.ndarray, ax=None, save: str = None):
         ax.set_xlabel("Time")
         ax.set_ylabel("Mean Amplitude")
 
+
 def compute_intra_segment_variance(spectrogram: np.ndarray) -> float:
     return np.var(spectrogram)
 
-def inspect_random_spectrogram(csv_split_path: str, split_id=0, num_samples=3, save: str = None):
+
+def inspect_random_spectrogram(
+    csv_split_path: str, split_id=0, num_samples=3, save: str = None
+):
     df = pd.read_csv(csv_split_path)
     split_df = df[df["split"] == split_id]
     paths = split_df["path"].tolist()
-    
+
     sampled_paths = random.sample(paths, min(num_samples, len(paths)))
 
     for i, path in enumerate(sampled_paths):
@@ -190,20 +197,31 @@ def inspect_random_spectrogram(csv_split_path: str, split_id=0, num_samples=3, s
             spectrogram = spectrogram.numpy()
 
             print(f"Label: {label.numpy()}")
-            print(f"Intra-segment variance: {compute_intra_segment_variance(spectrogram):.5f}")
+            print(
+                f"Intra-segment variance: {compute_intra_segment_variance(spectrogram):.5f}"
+            )
 
             fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-            plot_frequency_distribution(spectrogram, ax=axes[0,0], save=save + f"_sample{i}" if save else None)
-            plot_local_structure(spectrogram, ax=axes[0,1], save=save + f"_sample{i}" if save else None)
-            plot_temporal_dynamics(spectrogram, ax=axes[1,0], save=save + f"_sample{i}" if save else None)
-            axes[1,1].hist(spectrogram.flatten(), bins=50)
-            axes[1,1].set_title("Histogram of Values")
+            plot_frequency_distribution(
+                spectrogram, ax=axes[0, 0], save=save + f"_sample{i}" if save else None
+            )
+            plot_local_structure(
+                spectrogram, ax=axes[0, 1], save=save + f"_sample{i}" if save else None
+            )
+            plot_temporal_dynamics(
+                spectrogram, ax=axes[1, 0], save=save + f"_sample{i}" if save else None
+            )
+            axes[1, 1].hist(spectrogram.flatten(), bins=50)
+            axes[1, 1].set_title("Histogram of Values")
             if save:
                 plt.savefig(save + f"_sample{i}_hist.png")
             plt.tight_layout()
             plt.show()
 
-def check_intra_segment_variance(csv_split_path: str, max_samples_per_split: int = None):
+
+def check_intra_segment_variance(
+    csv_split_path: str, max_samples_per_split: int = None
+):
     """
     Compute and compare intra-segment variance for each split and label.
 
@@ -233,11 +251,9 @@ def check_intra_segment_variance(csv_split_path: str, max_samples_per_split: int
                     spectrogram, label = parse_tfrecord(raw_example)
                     spectrogram = spectrogram.numpy()
                     var = np.var(spectrogram)
-                    results.append({
-                        "split": split_name,
-                        "label": label.numpy(),
-                        "variance": var
-                    })
+                    results.append(
+                        {"split": split_name, "label": label.numpy(), "variance": var}
+                    )
                 except tf.errors.OutOfRangeError:
                     break
 
@@ -253,12 +269,12 @@ def check_intra_segment_variance(csv_split_path: str, max_samples_per_split: int
     print(var_df.groupby("label")["variance"].describe())
 
     # Optional: boxplot visualization
-    plt.figure(figsize=(12,5))
+    plt.figure(figsize=(12, 5))
     sns.boxplot(x="split", y="variance", data=var_df)
     plt.title("Intra-segment Variance per Split")
     plt.show()
 
-    plt.figure(figsize=(12,5))
+    plt.figure(figsize=(12, 5))
     sns.boxplot(x="label", y="variance", data=var_df)
     plt.title("Intra-segment Variance per Label")
     plt.show()
@@ -284,11 +300,11 @@ def filter_binary_classes(csv_input_path: str, csv_output_path: str):
 
     # Save the filtered CSV
     df_binary.to_csv(csv_output_path, index=False)
-    print(f"Filtered CSV saved to {csv_output_path}, containing {len(df_binary)} samples.")
+    print(
+        f"Filtered CSV saved to {csv_output_path}, containing {len(df_binary)} samples."
+    )
 
     return df_binary
-
-
 
 
 # =========================
@@ -302,5 +318,6 @@ if __name__ == "__main__":
     # inspect_random_spectrogram(csv_split_path, split_id=2, num_samples=3, save=SAVE_PLOT_PATH + "test")
     # check_intra_segment_variance(csv_split_path, max_samples_per_split=10)
     # binary_mapping = {0: 0, 1: 0, 2: 1, 3: 1, 4: 0, 5: 1}  # Example mapping
-    df_binary = filter_binary_classes(csv_split_path, "data/metadata/dataset_split_binary_32.csv")
-
+    df_binary = filter_binary_classes(
+        csv_split_path, "data/metadata/dataset_split_binary_32.csv"
+    )

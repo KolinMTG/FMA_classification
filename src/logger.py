@@ -1,5 +1,5 @@
-
 """Renvoie un logger configuré pour l'application."""
+
 #! /!\ Pour utiliser les logs, faire dans votre script :
 # from log_config import get_logger
 # logger = get_logger("nom_du_fichier_log.log", log_level=logging.INFO, console=True)
@@ -14,7 +14,9 @@ from src.cste import LOG_DIR
 LOG_DIR.mkdir(exist_ok=True)
 
 
-def get_logger(log_file_name: str, log_level=logging.INFO, console: bool = True) -> logging.Logger:
+def get_logger(
+    log_file_name: str, log_level=logging.INFO, console: bool = True
+) -> logging.Logger:
     """Configure and return a logger with file and optional console output.
 
     Args:
@@ -29,13 +31,21 @@ def get_logger(log_file_name: str, log_level=logging.INFO, console: bool = True)
     if not logger.handlers:
         log_file = LOG_DIR / log_file_name
 
-        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
-        file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%H:%M:%S'))
+        file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S"
+            )
+        )
         logger.addHandler(file_handler)
 
         if console:
             console_handler = logging.StreamHandler()
-            console_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', '%H:%M:%S'))
+            console_handler.setFormatter(
+                logging.Formatter(
+                    "%(asctime)s | %(levelname)s | %(message)s", "%H:%M:%S"
+                )
+            )
             logger.addHandler(console_handler)
 
     return logger

@@ -1,3 +1,5 @@
+"""Module for building, compiling, and registering CNN models for spectrogram classification."""
+
 import tensorflow as tf
 from pathlib import Path
 import pandas as pd
@@ -23,12 +25,23 @@ def _check_model_name_unique(model_name, model_csv_path):
         df = pd.read_csv(csv_path)
         if model_name in df["model_name"].values:
             log.error(f"Model name '{model_name}' already exists in {model_csv_path}.")
-            raise ValueError(f"Model name '{model_name}' already exists in {model_csv_path}.")
+            raise ValueError(
+                f"Model name '{model_name}' already exists in {model_csv_path}."
+            )
     else:
         csv_path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_size, dense_layers, dense_activations, dropout_rates):
+def _build_model(
+    input_shape,
+    output_units,
+    conv_layers,
+    conv_activations,
+    pool_size,
+    dense_layers,
+    dense_activations,
+    dropout_rates,
+):
     """
     Construct a CNN for spectrograms and return model + layer description.
     Uses GlobalMaxPooling2D to avoid dimension mismatch issues.
@@ -38,8 +51,12 @@ def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_
     layers_desc = []
 
     # --- Convolutional blocks ---
-    for i, ((filters, kernel_size), activation, dropout) in enumerate(zip(conv_layers, conv_activations, dropout_rates)):
-        x = tf.keras.layers.Conv2D(filters, kernel_size, activation=activation, padding="same")(x)
+    for i, ((filters, kernel_size), activation, dropout) in enumerate(
+        zip(conv_layers, conv_activations, dropout_rates)
+    ):
+        x = tf.keras.layers.Conv2D(
+            filters, kernel_size, activation=activation, padding="same"
+        )(x)
         layers_desc.append(f"conv-{filters}x{kernel_size}-{activation}")
         x = tf.keras.layers.MaxPooling2D(pool_size)(x)
         layers_desc.append(f"maxpool-{pool_size}")
@@ -64,9 +81,15 @@ def _build_model(input_shape, output_units, conv_layers, conv_activations, pool_
     return model, layers_desc
 
 
-
-
-def _register_model_csv(model_name, layers_desc, input_shape, output_units, optimizer, learning_rate, model_csv_path):
+def _register_model_csv(
+    model_name,
+    layers_desc,
+    input_shape,
+    output_units,
+    optimizer,
+    learning_rate,
+    model_csv_path,
+):
     """Save model configuration in a CSV registry."""
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_entry = {
@@ -104,7 +127,6 @@ def build_and_compile_model_03(
     learning_rate: float = ModelDefaults.LEARNING_RATE,
     loss: str = ModelDefaults.LOSS,
     metrics: list[str] = ModelDefaults.METRICS,
-
     save: bool = True,
     model_csv_path: str = ModelsCSV.REGISTRY,
 ) -> tf.keras.Model:
@@ -121,7 +143,7 @@ def build_and_compile_model_03(
         pool_size=pool_size,
         dense_layers=dense_layers,
         dense_activations=dense_activations,
-        dropout_rates=dropout_rates
+        dropout_rates=dropout_rates,
     )
 
     # Step 3: Compile
@@ -133,9 +155,16 @@ def build_and_compile_model_03(
 
     # Step 4: Register CSV
     if save == True:
-        _register_model_csv(model_name, layers_desc, input_shape, output_units, optimizer, learning_rate, model_csv_path)
+        _register_model_csv(
+            model_name,
+            layers_desc,
+            input_shape,
+            output_units,
+            optimizer,
+            learning_rate,
+            model_csv_path,
+        )
 
     log.info(f"Model '{model_name}' built, compiled, and registered successfully.")
 
     return model
-
