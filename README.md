@@ -1,7 +1,7 @@
 # Music Genre Classification from Audio Signals
 
 - **Date**: 2026-01-01
-- **Status**: In progress
+- **Status**: Finished on 26-01-07
 - **Author**: Colin MANYRI
 - **License**: MIT - Copyright (c) 2026 Colin MANYRI
 - **Version**: 10.0.0.1
