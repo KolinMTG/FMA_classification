@@ -35,7 +35,7 @@ Training data is stored in the `data` folder, which must contain at least **FMA_
 
 - `.logs`: project log files  
 - `.trash`: files deleted via functions in [others.py](src/others.py)
-- Execution-generated folders such as `optimization_results`, `results_quick_test`, `results_tests`, `models`, containing trained models and associated information  
+- `execution_example` : show and exemple of generated folders such as `optimization_results`, `results_quick_test`, `results_tests`, `models`, containing trained models and associated information and performance analysis 
 
 Complete project documentation is located in the `documents` folder, including:
 
