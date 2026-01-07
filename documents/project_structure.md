@@ -87,6 +87,8 @@ Two additional files are also present:
 
 * **[main_pipeline.py](../src/main_pipeline.py)**: orchestrates the full project pipeline — selecting data, building models, training them, evaluating them, selecting the best one, and returning the final model. Also provides a function to run predictions on a given audio file.
 
+* **[performance_statistics](../src/perf_statistics.py)**: Used to generate the model_performance_analysis file, data for performance analysis of a defined model on pretreated tfrecords test files. This part is volutarly not using the labels in the tfrecords.
+
 
 ## Documents Folder
 
